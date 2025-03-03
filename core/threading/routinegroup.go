@@ -9,7 +9,7 @@ type RoutineGroup struct {
 
 // NewRoutineGroup creates a new RoutineGroup.
 func NewRoutineGroup() *RoutineGroup {
-	return &RoutineGroup{}
+	return new(RoutineGroup)
 }
 
 // Run runs the provided fn in a RoutineGroup.
