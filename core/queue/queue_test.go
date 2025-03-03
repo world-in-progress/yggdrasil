@@ -83,6 +83,7 @@ func (p *mockedProducer) Produce() (string, bool) {
 	}
 
 	time.Sleep(time.Second)
+	fmt.Println("Producer done")
 	return "", false
 }
 
@@ -98,9 +99,9 @@ func (c *mockedConsumer) OnEvent(any) {
 }
 
 func (l *mockedListener) OnPause() {
-	fmt.Sprintln("Paused")
+	fmt.Println("Paused")
 }
 
 func (l *mockedListener) OnResume() {
-	fmt.Sprintln("Resumed")
+	fmt.Println("Resumed")
 }

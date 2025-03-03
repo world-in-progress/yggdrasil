@@ -132,7 +132,7 @@ func (q *Queue[T]) produce() {
 	for {
 		select {
 		case <-q.quit:
-			fmt.Sprintln("Quitting producer")
+			fmt.Println("Quitting producer")
 			return
 		default:
 			if v, ok := q.produceOne(producer); ok {
@@ -177,7 +177,7 @@ func (q *Queue[T]) consume(eventChan chan any) {
 			if ok {
 				q.consumeOne(consumer, message)
 			} else {
-				fmt.Sprintln("Task channel was closed, quitting consumer...")
+				fmt.Println("Task channel was closed, quitting consumer...")
 				return
 			}
 		case event := <-eventChan:
