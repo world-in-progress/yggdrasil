@@ -29,3 +29,6 @@ go.work.sum
 
 # Test files
 *.test.go
+
+# KOKO prototype
+koko
