@@ -1,5 +1,7 @@
 package threading
 
+import "fmt"
+
 type Worker struct {
 	ID string
 }
@@ -13,15 +15,19 @@ func NewWorker(workerID string, taskChan chan *TaskEntry, firstEntry *TaskEntry)
 	// start worker
 	GoSafe(func() {
 
-		if firstEntry != nil && !firstEntry.IsCancelled() {
-			firstEntry.task.Handler()
+		if firstEntry != nil && !firstEntry.IsIgnoreable() {
+			firstEntry.task.Process()
+			firstEntry.Complete()
+			firstEntry = nil // cut off reference
 		}
 
 		for entry := range taskChan {
-			if entry.IsCancelled() {
-				return
+			if entry.IsIgnoreable() {
+				fmt.Printf("Task (ID: %s) has been canceled or done\n", entry.task.GetID())
+				continue
 			}
-			entry.task.Handler()
+			entry.task.Process()
+			entry.Complete()
 		}
 	})
 	return w

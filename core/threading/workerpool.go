@@ -37,26 +37,26 @@ func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *Worker
 	return wp
 }
 
-func (wp *WorkerPool) Submit(task Task) {
-	wp.process(task, nil)
+func (wp *WorkerPool) Submit(task Task) (TaskEntryCancelFunc, error) {
+	return wp.process(task, nil)
 }
 
-func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task Task) error {
+func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task Task) (TaskEntryCancelFunc, error) {
 	return wp.process(task, time.After(timeout))
 }
 
-func (wp *WorkerPool) process(task Task, timeout <-chan time.Time) error {
+func (wp *WorkerPool) process(task Task, timeout <-chan time.Time) (TaskEntryCancelFunc, error) {
 	entry := NewTaskEntry(task)
 
 	select {
 	case <-timeout:
-		return ErrProcessTimeout
+		return nil, ErrProcessTimeout
 
 	case wp.tasks <- entry:
-		return nil
+		return entry.Cancel, nil
 
 	case wp.workers <- struct{}{}:
 		NewWorker(strconv.Itoa(len(wp.workers)), wp.tasks, entry)
-		return nil
+		return entry.Cancel, nil
 	}
 }
