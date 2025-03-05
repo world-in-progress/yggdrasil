@@ -1,82 +1,23 @@
 package threading
 
 import (
-	"fmt"
-	"sync"
-	"sync/atomic"
+	"runtime"
+	"strconv"
 	"testing"
-	"time"
 )
 
-type simpleTask struct {
-	id   string
-	data uint32
-}
+func BenchmarkWorkerPool(b *testing.B) {
 
-func (t *simpleTask) GetID() string   { return t.id }
-func (t *simpleTask) SetID(id string) { t.id = id }
-func (t *simpleTask) Handler(workerID int, taskID string) *TaskDoneMessage {
+	var taskNum int = 10000000
 
-	for range 1000 {
-		t.data = uint32(t.data) + 1
-	}
-
-	return &TaskDoneMessage{
-		WorkerID: workerID,
-		TaskID:   taskID,
-		Result:   t.data,
-		Err:      nil,
-	}
-}
-
-func TestWorkerPool(t *testing.T) {
-	wp := NewWorkerPool()
-	wg := sync.WaitGroup{}
-
-	taskNum := 1000000
-	cancelNum := int(0)
-	cbCount := new(uint32)
-	dataSum := new(uint32)
-
-	// task callback
-	callback := func(message *TaskDoneMessage) {
-		if message.Err != nil {
-			fmt.Printf("Task_%s failed: %v\n", message.TaskID, message.Err)
-			return
+	bufferSize := runtime.NumCPU() * 1000
+	maxWorkerNum := runtime.NumCPU() * 2
+	wp := NewWorkerPool(maxWorkerNum, bufferSize, runtime.NumCPU()*2)
+	for b.Loop() {
+		wg.Add(taskNum)
+		for taskIndex := range taskNum {
+			wp.Submit(NewMockedWorkerTask(strconv.Itoa(taskIndex)))
 		}
-		atomic.AddUint32(cbCount, 1)
-		atomic.AddUint32(dataSum, message.Result.(uint32))
+		wg.Wait()
 	}
-
-	start := time.Now()
-	for i := range taskNum {
-		task := &simpleTask{data: uint32(i)}
-		cancel, err := wp.Submit(task, callback)
-		if err != nil {
-			t.Fatalf("Submit failed: %v\n", err)
-		}
-
-		// test cancel
-		if i%200 == 0 {
-			cancel()
-			cancelNum++
-		}
-	}
-	fmt.Printf("Submitted %v tasks in %v\n", taskNum, time.Since(start))
-
-	// wait for all tasks done
-	wg.Add(1)
-	GoSafe(func() {
-		defer wg.Done()
-
-		for {
-			if int(atomic.LoadUint32(cbCount)) == taskNum-cancelNum {
-				break
-			}
-		}
-		fmt.Printf("Tasks completed in %v\nCallback count: %v\nData sum: %v\n", time.Since(start), *cbCount, *dataSum)
-	})
-	wg.Wait()
-
-	wp.Shutdown()
 }
