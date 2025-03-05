@@ -25,7 +25,11 @@ func NewMockedWorkerTask(taskID string) *mockedWorkerTask {
 	}
 }
 
-func (mwt *mockedWorkerTask) Handler() error {
+func (mwt *mockedWorkerTask) GetID() string {
+	return mwt.ID
+}
+
+func (mwt *mockedWorkerTask) Process() error {
 	defer wg.Done()
 
 	for range 1000 {
@@ -67,7 +71,7 @@ func BenchmarkWorker(b *testing.B) {
 			for taskIndex := range taskNum {
 				task := NewMockedWorkerTask(strconv.Itoa(taskIndex))
 				go func() {
-					task.Handler()
+					task.Process()
 				}()
 			}
 			wg.Wait()
