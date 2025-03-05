@@ -15,18 +15,19 @@ var (
 )
 
 func BenchmarkWorkerPool(b *testing.B) {
-	wp := NewWorkerPool(maxWorkerNum, bufferSize, spawnWorkerNum)
 	for b.Loop() {
 		wg.Add(taskNum)
+		wp := NewWorkerPool(spawnWorkerNum, maxWorkerNum, bufferSize)
 		for taskIndex := range taskNum {
 			wp.Submit(NewMockedWorkerTask(strconv.Itoa(taskIndex)))
 		}
 		wg.Wait()
+		wp.Shutdown()
 	}
 }
 
 func TestTaskCancel(t *testing.T) {
-	wp := NewWorkerPool(maxWorkerNum, bufferSize, spawnWorkerNum)
+	wp := NewWorkerPool(spawnWorkerNum, maxWorkerNum, bufferSize)
 	wg.Add(taskNum)
 	for taskIndex := range taskNum {
 		cancel, _ := wp.Submit(NewMockedWorkerTask(strconv.Itoa(taskIndex)))
@@ -39,4 +40,5 @@ func TestTaskCancel(t *testing.T) {
 		}
 	}
 	wg.Wait()
+	wp.Shutdown()
 }

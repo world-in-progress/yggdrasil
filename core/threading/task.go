@@ -9,50 +9,36 @@ type (
 	Task interface {
 		GetID() string
 		Process() error
+		Cancel() bool
+		Complete()
+		IsCanceled() bool
+		IsCompleted() bool
+		IsIgnoreable() bool
 	}
 
-	// BaseTask is the basic structure for a worker task.
+	// BaseTask is the basic structure for a Task interface.
 	BaseTask struct {
-		ID       string
-		WorkerID string
-	}
-
-	// TaskEntry is the structure to hold a task and its context.
-	TaskEntry struct {
-		task      Task
+		ID        string
+		WorkerID  string
 		done      atomic.Bool
 		cancelled atomic.Bool
 	}
 
-	// TaskEntryCancelFunc is used to cancel the execution of a task. Return false if task has been done.
-	TaskEntryCancelFunc func() bool
+	// TaskCancelFunc is used to cancel the execution of a task. Return false if task has been done.
+	TaskCancelFunc func() bool
 )
 
-func NewTaskEntry(task Task) *TaskEntry {
-	return &TaskEntry{task: task}
-}
-
-func (te *TaskEntry) Complete() {
-	te.done.Store(true)
-}
-
-func (te *TaskEntry) IsIgnoreable() bool {
-	return te.cancelled.Load() || te.done.Load()
-}
-
-func (te *TaskEntry) IsCompleted() bool {
-	return te.done.Load()
-}
-
-func (te *TaskEntry) Cancel() bool {
-	if !te.done.Load() {
-		te.done.Store(true)
-		te.cancelled.Store(true)
+func (bt *BaseTask) Process() error     { return nil }
+func (bt *BaseTask) GetID() string      { return bt.ID }
+func (bt *BaseTask) Complete()          { bt.done.Store(true) }
+func (bt *BaseTask) IsCompleted() bool  { return bt.done.Load() }
+func (bt *BaseTask) IsCanceled() bool   { return bt.cancelled.Load() }
+func (bt *BaseTask) IsIgnoreable() bool { return bt.cancelled.Load() || bt.done.Load() }
+func (bt *BaseTask) Cancel() bool {
+	if !bt.done.Load() {
+		bt.done.Store(true)
+		bt.cancelled.Store(true)
 		return true
 	}
 	return false
-}
-
-func (te *TaskEntry) IsCancelled() bool {
-	return te.cancelled.Load()
 }

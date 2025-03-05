@@ -51,7 +51,7 @@ func BenchmarkWorker(b *testing.B) {
 		// benchmark for workers
 		workerNum := runtime.NumCPU() * 2
 		workers := make([]*Worker, workerNum)
-		taskChan := make(chan *TaskEntry, workerNum*100)
+		taskChan := make(chan Task, workerNum*100)
 		for index := range workerNum {
 			workers[index] = NewWorker(strconv.Itoa(index), taskChan, nil)
 		}
@@ -59,8 +59,7 @@ func BenchmarkWorker(b *testing.B) {
 		for b.Loop() {
 			wg.Add(taskNum)
 			for taskIndex := range taskNum {
-				task := NewMockedWorkerTask(strconv.Itoa(taskIndex))
-				taskChan <- NewTaskEntry(task)
+				taskChan <- NewMockedWorkerTask(strconv.Itoa(taskIndex))
 			}
 			wg.Wait()
 		}

@@ -11,12 +11,12 @@ var ErrProcessTimeout = fmt.Errorf("process error: timed out")
 
 type (
 	WorkerPool struct {
+		tasks   chan Task
 		workers chan struct{}
-		tasks   chan *TaskEntry
 	}
 )
 
-func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *WorkerPool {
+func NewWorkerPool(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *WorkerPool {
 	if spawnWorkerNum <= 0 && bufferSize > 0 {
 		panic("dead queue configuration detected")
 	}
@@ -25,8 +25,8 @@ func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *Worker
 	}
 
 	wp := &WorkerPool{
+		tasks:   make(chan Task, bufferSize),
 		workers: make(chan struct{}, maxWorkerNum),
-		tasks:   make(chan *TaskEntry, bufferSize),
 	}
 
 	for range spawnWorkerNum {
@@ -37,26 +37,39 @@ func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *Worker
 	return wp
 }
 
-func (wp *WorkerPool) Submit(task Task) (TaskEntryCancelFunc, error) {
+func (wp *WorkerPool) Shutdown() {
+	close(wp.tasks)
+
+	for task := range wp.tasks {
+		task.Cancel()
+	}
+
+	for range len(wp.workers) {
+		<-wp.workers
+	}
+
+	close(wp.workers)
+}
+
+func (wp *WorkerPool) Submit(task Task) (TaskCancelFunc, error) {
 	return wp.process(task, nil)
 }
 
-func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task Task) (TaskEntryCancelFunc, error) {
+func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task Task) (TaskCancelFunc, error) {
 	return wp.process(task, time.After(timeout))
 }
 
-func (wp *WorkerPool) process(task Task, timeout <-chan time.Time) (TaskEntryCancelFunc, error) {
-	entry := NewTaskEntry(task)
+func (wp *WorkerPool) process(task Task, timeout <-chan time.Time) (TaskCancelFunc, error) {
 
 	select {
 	case <-timeout:
 		return nil, ErrProcessTimeout
 
-	case wp.tasks <- entry:
-		return entry.Cancel, nil
+	case wp.tasks <- task:
+		return task.Cancel, nil
 
 	case wp.workers <- struct{}{}:
-		NewWorker(strconv.Itoa(len(wp.workers)), wp.tasks, entry)
-		return entry.Cancel, nil
+		NewWorker(strconv.Itoa(len(wp.workers)), wp.tasks, task)
+		return task.Cancel, nil
 	}
 }
