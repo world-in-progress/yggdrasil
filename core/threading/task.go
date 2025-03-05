@@ -20,8 +20,8 @@ type (
 	BaseTask struct {
 		ID        string
 		WorkerID  string
-		Done      atomic.Bool
-		Cancelled atomic.Bool
+		done      atomic.Bool
+		cancelled atomic.Bool
 	}
 
 	// TaskCancelFunc is used to cancel the execution of a task. Return false if task has been done.
@@ -30,14 +30,14 @@ type (
 
 func (bt *BaseTask) Process() error     { return nil }
 func (bt *BaseTask) GetID() string      { return bt.ID }
-func (bt *BaseTask) Complete()          { bt.Done.Store(true) }
-func (bt *BaseTask) IsCompleted() bool  { return bt.Done.Load() }
-func (bt *BaseTask) IsCanceled() bool   { return bt.Cancelled.Load() }
-func (bt *BaseTask) IsIgnoreable() bool { return bt.Cancelled.Load() || bt.Done.Load() }
+func (bt *BaseTask) Complete()          { bt.done.Store(true) }
+func (bt *BaseTask) IsCompleted() bool  { return bt.done.Load() }
+func (bt *BaseTask) IsCanceled() bool   { return bt.cancelled.Load() }
+func (bt *BaseTask) IsIgnoreable() bool { return bt.cancelled.Load() || bt.done.Load() }
 func (bt *BaseTask) Cancel() bool {
-	if !bt.Done.Load() {
-		bt.Done.Store(true)
-		bt.Cancelled.Store(true)
+	if !bt.done.Load() {
+		bt.done.Store(true)
+		bt.cancelled.Store(true)
 		return true
 	}
 	return false

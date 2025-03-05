@@ -16,7 +16,7 @@ type (
 	}
 )
 
-func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *WorkerPool {
+func NewWorkerPool(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *WorkerPool {
 	if spawnWorkerNum <= 0 && bufferSize > 0 {
 		panic("dead queue configuration detected")
 	}
@@ -35,6 +35,20 @@ func NewWorkerPool(maxWorkerNum int, bufferSize int, spawnWorkerNum int) *Worker
 	}
 
 	return wp
+}
+
+func (wp *WorkerPool) Shutdown() {
+	close(wp.tasks)
+
+	for task := range wp.tasks {
+		task.Cancel()
+	}
+
+	for range len(wp.workers) {
+		<-wp.workers
+	}
+
+	close(wp.workers)
 }
 
 func (wp *WorkerPool) Submit(task Task) (TaskCancelFunc, error) {
