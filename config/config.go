@@ -13,11 +13,6 @@ type MongoConfig struct {
 }
 
 func LoadMongoConfig() MongoConfig {
-	viper.SetConfigName("config")
-	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
-	viper.AddConfigPath("./config")
-	viper.AddConfigPath("../config")
 	viper.AutomaticEnv() // enable overwrite envs
 
 	// default

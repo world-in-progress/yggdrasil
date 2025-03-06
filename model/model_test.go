@@ -6,7 +6,6 @@ import (
 )
 
 func TestModel(t *testing.T) {
-
 	// init model manager
 	modelMgr, err := NewModelManager("demo.model.json")
 	if err != nil {
