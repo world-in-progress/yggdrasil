@@ -6,7 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
-	"github.com/world-in-progress/yggdrasil/logger"
+	"github.com/world-in-progress/yggdrasil/core/logger"
 	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
@@ -17,9 +17,9 @@ type TestNode struct {
 }
 
 func TestMongo(t *testing.T) {
-	viper.SetConfigName("mongo_test_config")
+	viper.SetConfigName("test_config")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath(".")
+	viper.AddConfigPath("../../test")
 
 	repo := NewMongoRepository()
 

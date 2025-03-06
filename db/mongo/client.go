@@ -7,7 +7,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	"github.com/world-in-progress/yggdrasil/config"
-	"github.com/world-in-progress/yggdrasil/logger"
+	"github.com/world-in-progress/yggdrasil/core/logger"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 )

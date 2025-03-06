@@ -4,9 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/world-in-progress/yggdrasil/core/logger"
 	"github.com/world-in-progress/yggdrasil/db"
-	"github.com/world-in-progress/yggdrasil/logger"
-	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
@@ -19,12 +18,12 @@ func NewMongoRepository() db.Repository {
 	return &MongoRepository{db: client.Database}
 }
 
-func (r *MongoRepository) Create(ctx context.Context, collection string, document any) (string, error) {
-	coll := r.db.Collection(collection)
+func (r *MongoRepository) Create(ctx context.Context, table string, record any) (string, error) {
+	coll := r.db.Collection(table)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(GetMongoClient().Config.Timeout)*time.Second)
 	defer cancel()
 
-	res, err := coll.InsertOne(ctx, document)
+	res, err := coll.InsertOne(ctx, record)
 	if err != nil {
 		logger.Error("Insert failed: %v", err)
 		return "", err
@@ -32,8 +31,8 @@ func (r *MongoRepository) Create(ctx context.Context, collection string, documen
 	return res.InsertedID.(string), nil
 }
 
-func (r *MongoRepository) Read(ctx context.Context, collection string, filter bson.M) (any, error) {
-	coll := r.db.Collection(collection)
+func (r *MongoRepository) Read(ctx context.Context, table string, filter any) (any, error) {
+	coll := r.db.Collection(table)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(GetMongoClient().Config.Timeout)*time.Second)
 	defer cancel()
 
@@ -49,8 +48,8 @@ func (r *MongoRepository) Read(ctx context.Context, collection string, filter bs
 	return result, nil
 }
 
-func (r *MongoRepository) Update(ctx context.Context, collection string, filter bson.M, update bson.M) error {
-	coll := r.db.Collection(collection)
+func (r *MongoRepository) Update(ctx context.Context, table string, filter any, update any) error {
+	coll := r.db.Collection(table)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(GetMongoClient().Config.Timeout)*time.Second)
 	defer cancel()
 
@@ -62,8 +61,8 @@ func (r *MongoRepository) Update(ctx context.Context, collection string, filter 
 	return nil
 }
 
-func (r *MongoRepository) Delete(ctx context.Context, collection string, filter bson.M) error {
-	coll := r.db.Collection(collection)
+func (r *MongoRepository) Delete(ctx context.Context, table string, filter any) error {
+	coll := r.db.Collection(table)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(GetMongoClient().Config.Timeout)*time.Second)
 	defer cancel()
 
@@ -75,8 +74,8 @@ func (r *MongoRepository) Delete(ctx context.Context, collection string, filter 
 	return nil
 }
 
-func (r *MongoRepository) EnsureIndexes(ctx context.Context, collection string, indexes []mongo.IndexModel) error {
-	coll := r.db.Collection(collection)
+func (r *MongoRepository) EnsureIndexes(ctx context.Context, table string, indexes []mongo.IndexModel) error {
+	coll := r.db.Collection(table)
 	ctx, cancel := context.WithTimeout(ctx, time.Duration(GetMongoClient().Config.Timeout)*time.Second)
 	defer cancel()
 
@@ -86,7 +85,7 @@ func (r *MongoRepository) EnsureIndexes(ctx context.Context, collection string, 
 		logger.Error("Index creation failed: %v", err)
 		return err
 	}
-	logger.Info("Index created successfully for collection %s", collection)
+	logger.Info("Index created successfully for collection %s", table)
 	return nil
 }
 

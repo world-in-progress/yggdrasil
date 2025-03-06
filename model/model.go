@@ -7,6 +7,7 @@ import (
 	"os"
 	"sync"
 
+	"github.com/world-in-progress/yggdrasil/config"
 	"go.mongodb.org/mongo-driver/bson"
 )
 
@@ -37,8 +38,11 @@ var basicTypes = map[string]bool{
 	"array":   true,
 }
 
-func NewModelManager(configPath string) (*ModelManager, error) {
-	data, err := os.ReadFile(configPath)
+func NewModelManager() (*ModelManager, error) {
+
+	modelConfig := config.LoadModelConfig()
+
+	data, err := os.ReadFile(modelConfig.Path)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read config file: %v", err)
 	}
