@@ -9,10 +9,15 @@ import (
 	"go.mongodb.org/mongo-driver/mongo"
 )
 
+type TestNode struct {
+	ID   string `bson:"_id"`
+	Name string `bson:"name"`
+}
+
 func TestRepository(t *testing.T) {
 	repo := NewMongoRepository()
 
-	node := Node{
+	node := TestNode{
 		ID:   "testNode2",
 		Name: "Scene Root",
 	}
@@ -42,7 +47,7 @@ func TestTransaction(t *testing.T) {
 	repo := NewMongoRepository()
 
 	trans := func(sessionCtx mongo.SessionContext) error {
-		node := Node{ID: "2", Name: "Subscene node"}
+		node := TestNode{ID: "2", Name: "Subscene node"}
 		_, err := repo.Insert(sessionCtx, "nodes", node)
 		if err != nil {
 			return err
