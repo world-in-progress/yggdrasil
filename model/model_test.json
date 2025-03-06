@@ -1,0 +1,48 @@
+{
+    "models": [
+        {
+            "name": "MongoDocument",
+            "fields": {
+                "_id": {"type": "string", "required": true},
+                "name": {"type": "string", "required": true}
+            }
+        },
+        {
+            "name": "LocalCalling",
+            "fields": {
+                "path": {"type": "string", "required": true},
+                "paramDesc": {
+                    "type": "array",
+                    "item": {"type": "string"}
+                }
+            }
+        },
+        {
+            "name": "RestfulCalling",
+            "fields": {
+                "API": {"type": "string", "required": true},
+                "method": {"type": "string", "required": true},
+                "reqDesc": {"type": "string", "required": true},
+                "resDesc": {"type": "string", "required": true}
+            }
+        },
+        {
+            "name": "Component",
+            "extends": "MongoDocument",
+            "fields": {
+                "rest": {"type": "RestfulCalling", "required": false}
+            }
+        },
+        {
+            "name": "Node",
+            "extends": "MongoDocument",
+            "fields": {
+                "parent": {"type": "string"},
+                "components": { 
+                    "type": "array",
+                    "item": {"type": "Component"}
+                }
+            }
+        }
+    ]
+  }

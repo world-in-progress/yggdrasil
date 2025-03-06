@@ -1,0 +1,6 @@
+mongo:
+  uri: "mongodb://localhost:27017"
+  database: "mongo_test_db"
+  timeout: 15
+model:
+  path: "model_test.json"
