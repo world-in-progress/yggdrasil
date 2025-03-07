@@ -11,7 +11,7 @@ var ErrProcessTimeout = fmt.Errorf("process error: timed out")
 
 type (
 	WorkerPool struct {
-		tasks   chan Task
+		tasks   chan ITask
 		workers chan struct{}
 	}
 )
@@ -25,7 +25,7 @@ func NewWorkerPool(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *Worker
 	}
 
 	wp := &WorkerPool{
-		tasks:   make(chan Task, bufferSize),
+		tasks:   make(chan ITask, bufferSize),
 		workers: make(chan struct{}, maxWorkerNum),
 	}
 
@@ -51,15 +51,15 @@ func (wp *WorkerPool) Shutdown() {
 	close(wp.workers)
 }
 
-func (wp *WorkerPool) Submit(task Task) (TaskCancelFunc, error) {
+func (wp *WorkerPool) Submit(task ITask) (TaskCancelFunc, error) {
 	return wp.process(task, nil)
 }
 
-func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task Task) (TaskCancelFunc, error) {
+func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task ITask) (TaskCancelFunc, error) {
 	return wp.process(task, time.After(timeout))
 }
 
-func (wp *WorkerPool) process(task Task, timeout <-chan time.Time) (TaskCancelFunc, error) {
+func (wp *WorkerPool) process(task ITask, timeout <-chan time.Time) (TaskCancelFunc, error) {
 
 	select {
 	case <-timeout:

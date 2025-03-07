@@ -1,4 +1,4 @@
-package db
+package model
 
 import (
 	"context"
@@ -16,10 +16,26 @@ var mongoDoc = map[string]any{
 }
 
 var addAPI = map[string]any{
-	"API":     "localhost:8000/api/v0/add",
-	"method":  "POST",
-	"reqDesc": "Request body schema: application/json. Example: { 'a': 1, 'b': 2 }",
-	"resDesc": "Response schema: application/json. Example: {'result': 3}",
+	"api":       "localhost:8000/api/v0/add",
+	"method":    "POST",
+	"reqSchema": "application/json",
+	"resSchema": "application/json",
+	"reqParams": []any{
+		map[string]any{
+			"param": "a",
+			"desc":  "The addend, must be a number",
+		},
+		map[string]any{
+			"param": "b",
+			"desc":  "The summand, must be a number",
+		},
+	},
+	"resParams": []any{
+		map[string]any{
+			"param": "result",
+			"desc":  "The result, is a number",
+		},
+	},
 }
 
 var addComp = map[string]any{
@@ -37,7 +53,7 @@ var childNode = map[string]any{
 	"_id":        uuid.New().String(),
 	"name":       "Child Node",
 	"parent":     parentNode["_id"],
-	"components": []any{addComp},
+	"components": []any{addComp["_id"]},
 }
 
 func TestModel(t *testing.T) {
@@ -56,25 +72,22 @@ func TestModel(t *testing.T) {
 	repository := db.NewMongoRepository()
 
 	// test MongoDocument
-	if mongoDocData, err := modelMgr.ToBSON("MongoDocument", mongoDoc); err != nil {
+	if err := modelMgr.Validate("MongoDocument", mongoDoc); err != nil {
 		t.Error(err)
 	} else {
-		fmt.Println("Mongo Docunment BSON:", mongoDocData)
+		fmt.Println("Mongo Docunment BSON:", mongoDoc)
 	}
 
 	// test RestfulCalling
-	if addAPIData, err := modelMgr.ToBSON("RestfulCalling", addAPI); err != nil {
+	if err := modelMgr.Validate("RestfulCalling", addAPI); err != nil {
 		t.Error(err)
-	} else {
-		fmt.Println("Restful Calling BSON:", addAPIData)
 	}
 
 	// test Component
-	if addCompData, err := modelMgr.ToBSON("Component", addComp); err != nil {
+	if err := modelMgr.Validate("Component", addComp); err != nil {
 		t.Error(err)
 	} else {
-		fmt.Println("Component BSON:", addCompData)
-		if mongoID, err := repository.Create(context.Background(), "Component", addCompData); err != nil {
+		if mongoID, err := repository.Create(context.Background(), "component", addComp); err != nil {
 			t.Error(err)
 		} else {
 			fmt.Printf("Instert component %s\n", mongoID)
@@ -82,22 +95,20 @@ func TestModel(t *testing.T) {
 	}
 
 	// test Node
-	if parentNodeData, err := modelMgr.ToBSON("Node", parentNode); err != nil {
+	if err := modelMgr.Validate("Node", parentNode); err != nil {
 		t.Error(err)
 	} else {
-		fmt.Println("Parent Node BSON:", parentNodeData)
-		if mongoID, err := repository.Create(context.Background(), "Node", parentNodeData); err != nil {
+		if mongoID, err := repository.Create(context.Background(), "node", parentNode); err != nil {
 			t.Error(err)
 		} else {
 			fmt.Printf("Instert node %s\n", mongoID)
 		}
 	}
 
-	if childNodeData, err := modelMgr.ToBSON("Node", childNode); err != nil {
+	if err := modelMgr.Validate("Node", childNode); err != nil {
 		t.Error(err)
 	} else {
-		fmt.Println("Child Node BSON:", childNodeData)
-		if mongoID, err := repository.Create(context.Background(), "Node", childNodeData); err != nil {
+		if mongoID, err := repository.Create(context.Background(), "node", childNode); err != nil {
 			t.Error(err)
 		} else {
 			fmt.Printf("Instert node %s\n", mongoID)
