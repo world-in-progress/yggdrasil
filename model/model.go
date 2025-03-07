@@ -1,34 +1,15 @@
-package db
+package model
 
 import (
 	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
+	"reflect"
 	"sync"
 
 	"github.com/world-in-progress/yggdrasil/config"
-	"go.mongodb.org/mongo-driver/bson"
 )
-
-type FieldDefinition struct {
-	Type     string
-	Required bool
-	Fields   map[string]*FieldDefinition
-	Item     *FieldDefinition
-	Ref      string
-}
-
-type ModelDefinition struct {
-	Name    string
-	Extends string
-	Fields  map[string]*FieldDefinition
-}
-
-type ModelManager struct {
-	models map[string]*ModelDefinition
-	mu     sync.RWMutex
-}
 
 var basicTypes = map[string]bool{
 	"string":  true,
@@ -36,6 +17,12 @@ var basicTypes = map[string]bool{
 	"float64": true,
 	"bool":    true,
 	"array":   true,
+	"map":     true,
+}
+
+type ModelManager struct {
+	models map[string]*ModelDefinition
+	mu     sync.RWMutex
 }
 
 func NewModelManager() (*ModelManager, error) {
@@ -103,22 +90,50 @@ func NewModelManager() (*ModelManager, error) {
 	}, nil
 }
 
-func (m *ModelManager) ValidateData(modelName string, data map[string]any) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+func (mm *ModelManager) Validate(modelName string, data map[string]any) error {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
 
-	model, ok := m.models[modelName]
+	model, ok := mm.models[modelName]
 	if !ok {
 		return fmt.Errorf("model %s not found", modelName)
 	}
-	return validateFields(model.Fields, data)
+	return mm.validateFields(model.Fields, data)
 }
 
-func (m *ModelManager) ToBSON(modelName string, data map[string]any) (bson.M, error) {
-	if err := m.ValidateData(modelName, data); err != nil {
-		return nil, err
+func (mm *ModelManager) ValidateField(modelName string, filedName string, data any) error {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	var ok bool
+	var def *FieldDefinition
+	var model *ModelDefinition
+
+	model, ok = mm.models[modelName]
+	if !ok {
+		return fmt.Errorf("model %s not found", modelName)
 	}
-	return bson.M(data), nil
+	def, ok = model.Fields[filedName]
+	if !ok {
+		return fmt.Errorf("model %s does not have field %s", modelName, filedName)
+	}
+	return mm.validateField(filedName, data, def)
+}
+
+func (mm *ModelManager) validateFields(fields map[string]*FieldDefinition, data map[string]any) error {
+	for name, def := range fields {
+		value, exists := data[name]
+		if !exists {
+			if def.Required {
+				return fmt.Errorf("field %s is required", name)
+			}
+			continue
+		}
+		if err := mm.validateField(name, value, def); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldDefinition, models map[string]*ModelDefinition) error {
@@ -144,7 +159,7 @@ func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldD
 			Ref:      def.Ref,
 		}
 
-		// process nested fields
+		// process nested fields (type == "object")
 		if def.Fields != nil {
 			if def.Type != "object" {
 				return fmt.Errorf("field %s: fields only allowed with type 'object'", name)
@@ -155,10 +170,10 @@ func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldD
 			}
 		}
 
-		// process array item
+		// process array or map item
 		if def.Item != nil {
-			if def.Type != "array" {
-				return fmt.Errorf("field %s: item only allowed with type 'array'", name)
+			if def.Type != "array" && def.Type != "map" {
+				return fmt.Errorf("field %s: item only allowed with type 'array' or 'map'", name)
 			}
 			var itemDef struct {
 				Type   string                     `json:"type"`
@@ -186,7 +201,7 @@ func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldD
 		// process complex type (model reference)
 		if models != nil {
 			// for object referencing a model
-			if def.Type != "object" && def.Type != "array" {
+			if def.Type != "object" && def.Type != "array" && def.Type != "map" {
 				if _, isBasic := basicTypes[def.Type]; !isBasic || def.Ref != "" {
 					refType := def.Type
 					if def.Ref != "" {
@@ -201,8 +216,8 @@ func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldD
 					}
 				}
 			}
-			// for array item referencing a model
-			if def.Type == "array" && fieldDef.Item != nil {
+			// for array or map item referencing a model
+			if (def.Type == "array" || def.Type == "map") && fieldDef.Item != nil {
 				if _, isBasic := basicTypes[fieldDef.Item.Type]; !isBasic || fieldDef.Item.Ref != "" {
 					refType := fieldDef.Item.Type
 					if fieldDef.Item.Ref != "" {
@@ -223,83 +238,92 @@ func parseFields(rawFields map[string]json.RawMessage, fields map[string]*FieldD
 	return nil
 }
 
-func validateFields(fields map[string]*FieldDefinition, data map[string]any) error {
-	for name, def := range fields {
-		value, exists := data[name]
-		if !exists && def.Required {
-			return fmt.Errorf("field %s is required", name)
+type validatorFunc func(name string, value any) error
+
+var typeValidators = map[string]validatorFunc{
+	"string": func(name string, value any) error {
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("%s must be a string", name)
 		}
-		if exists {
-			switch def.Type {
-			case "string":
-				if _, ok := value.(string); !ok {
-					return fmt.Errorf("field %s must be a string", name)
-				}
-			case "int":
-				if _, ok := value.(int); !ok {
-					if f, ok := value.(float64); ok && float64((int(f))) == f {
-						data[name] = int(f)
-					} else {
-						return fmt.Errorf("field %s must be an integer", name)
-					}
-				}
-			case "float64":
-				if _, ok := value.(float64); !ok {
-					return fmt.Errorf("field %s must be a float64", name)
-				}
-			case "bool":
-				if _, ok := value.(bool); !ok {
-					return fmt.Errorf("field %s must be a bool", name)
-				}
-			case "object":
-				if nested, ok := value.(map[string]any); ok {
-					if err := validateFields(def.Fields, nested); err != nil {
-						return fmt.Errorf("field %s: %v", name, err)
-					}
-				} else {
-					return fmt.Errorf("field %s must be an object", name)
-				}
-			case "array":
-				if arr, ok := value.([]any); ok {
-					if def.Item != nil {
-						for i, item := range arr {
-							switch def.Item.Type {
-							case "string":
-								if _, ok := item.(string); !ok {
-									return fmt.Errorf("item %d in %s must be a string", i, name)
-								}
-							case "int":
-								if _, ok := item.(int); !ok {
-									if f, ok := item.(float64); ok && float64(int(f)) == f {
-										arr[i] = int(f)
-									} else {
-										return fmt.Errorf("item %d in %s must be an integer", i, name)
-									}
-								}
-							case "float64":
-								if _, ok := item.(float64); !ok {
-									return fmt.Errorf("item %d in %s must be a float64", i, name)
-								}
-							case "bool":
-								if _, ok := item.(bool); !ok {
-									return fmt.Errorf("item %d in %s must be a bool", i, name)
-								}
-							case "object":
-								if nested, ok := item.(map[string]any); ok {
-									if err := validateFields(def.Item.Fields, nested); err != nil {
-										return fmt.Errorf("item %d in %s: %v", i, name, err)
-									}
-								} else {
-									return fmt.Errorf("item %d in %s must be an object", i, name)
-								}
-							}
-						}
-					}
-				} else {
-					return fmt.Errorf("field %s must be an array", name)
-				}
+		return nil
+	},
+	"int": func(name string, value any) error {
+		if _, ok := value.(int); !ok {
+			if f, ok := value.(float64); ok && float64(int(f)) == f {
+				reflect.ValueOf(&value).Elem().Set(reflect.ValueOf(int(f)))
+				return nil
+			}
+			return fmt.Errorf("%s must be an integer", name)
+		}
+		return nil
+	},
+	"float64": func(name string, value any) error {
+		if _, ok := value.(float64); !ok {
+			return fmt.Errorf("%s must be a float64", name)
+		}
+		return nil
+	},
+	"bool": func(name string, value any) error {
+		if _, ok := value.(bool); !ok {
+			return fmt.Errorf("%s must be a bool", name)
+		}
+		return nil
+	},
+}
+
+func (mm *ModelManager) validateField(name string, value any, def *FieldDefinition) error {
+	if modelDef, ok := mm.models[def.Type]; ok {
+		return mm.validateFields(modelDef.Fields, value.(map[string]any))
+	}
+
+	switch def.Type {
+	case "string", "int", "float64", "bool":
+		validator, ok := typeValidators[def.Type]
+		if !ok {
+			return fmt.Errorf("unsupported type %s for %s", def.Type, name)
+		}
+		return validator(name, value)
+
+	case "object":
+		nested, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s must be an object", name)
+		}
+		return mm.validateFields(def.Fields, nested)
+
+	case "array":
+		arr, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("%s must be an array", name)
+		}
+		if def.Item == nil {
+			return nil
+		}
+		for i, item := range arr {
+			itemName := fmt.Sprintf("item %d in %s", i, name)
+			if err := mm.validateField(itemName, item, def.Item); err != nil {
+				return err
 			}
 		}
+		return nil
+
+	case "map":
+		m, ok := value.(map[string]any)
+		if !ok {
+			return fmt.Errorf("%s must be a map", name)
+		}
+		if def.Item == nil {
+			return nil
+		}
+		for key, val := range m {
+			keyName := fmt.Sprintf("%s[%s]", name, key)
+			if err := mm.validateField(keyName, val, def.Item); err != nil {
+				return err
+			}
+		}
+		return nil
+
+	default:
+		return fmt.Errorf("unsupported type %s for %s", def.Type, name)
 	}
-	return nil
 }

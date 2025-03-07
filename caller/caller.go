@@ -1,8 +1,6 @@
-package threading
+package caller
 
-import (
-	"sync/atomic"
-)
+import "sync/atomic"
 
 type (
 	// ITask is the interface for a worker task.
@@ -16,16 +14,20 @@ type (
 		IsIgnoreable() bool
 	}
 
-	// BaseTask is the basic structure for a Task interface.
+	INode interface {
+		GetID() string
+		GetName() string
+		GetParentID() string
+		GetParam(name string) (any, error)
+		Serialize() map[string]any
+	}
+
 	BaseTask struct {
 		ID        string
 		WorkerID  string
 		done      atomic.Bool
 		cancelled atomic.Bool
 	}
-
-	// TaskCancelFunc is used to cancel the execution of a task. Return false if task has been done.
-	TaskCancelFunc func() bool
 )
 
 func (bt *BaseTask) GetID() string      { return bt.ID }

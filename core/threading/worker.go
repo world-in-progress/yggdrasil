@@ -8,7 +8,7 @@ type Worker struct {
 	ID string
 }
 
-func NewWorker(workerID string, taskChan chan Task, firstEntry Task) *Worker {
+func NewWorker(workerID string, taskChan chan ITask, firstEntry ITask) *Worker {
 
 	w := &Worker{
 		ID: workerID,
