@@ -70,8 +70,18 @@ func (n *Node) GetParam(name string) (any, error) {
 }
 
 func (n *Node) AddChild(childID string) {
-	// Do not update calltime for this AddChild is not called for functional using by outside.
+	// Do not update calltime because AddChild is not called for functional using by outside.
 	n.childrenIDs = append(n.childrenIDs, childID)
+}
+
+func (n *Node) RemoveChild(childID string) {
+	// Do not update calltime because AddChild is not called for functional using by outside.
+	for i, ID := range n.childrenIDs {
+		if ID == childID {
+			n.childrenIDs[i], n.childrenIDs[len(n.childrenIDs)-1] = n.childrenIDs[len(n.childrenIDs)-1], n.childrenIDs[i]
+			n.childrenIDs = n.childrenIDs[:len(n.childrenIDs)-1]
+		}
+	}
 }
 
 func (n *Node) UpdateAttribute(name string, update any) (any, error) {
