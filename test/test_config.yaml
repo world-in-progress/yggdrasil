@@ -3,4 +3,4 @@ mongo:
   database: "mongo_test_db"
   timeout: 15
 model:
-  path: "model_test.json"
+  path: "schema_test.json"

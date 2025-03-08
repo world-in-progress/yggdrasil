@@ -90,6 +90,14 @@ func NewModelManager() (*ModelManager, error) {
 	}, nil
 }
 
+func (mm *ModelManager) HasModel(modelName string) bool {
+	mm.mu.RLock()
+	defer mm.mu.RUnlock()
+
+	_, ok := mm.models[modelName]
+	return ok
+}
+
 func (mm *ModelManager) Validate(modelName string, data map[string]any) error {
 	mm.mu.RLock()
 	defer mm.mu.RUnlock()

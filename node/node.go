@@ -8,24 +8,24 @@ import (
 
 type (
 	Node struct {
-		ChildrenIDs []string
-		CallTime    time.Time
+		childrenIDs []string
+		callTime    time.Time
 		dirty       atomic.Bool
-		Attributes  map[string]any
+		attributes  map[string]any
 	}
 )
 
 func NewNode(attributes map[string]any) *Node {
 	n := &Node{
-		CallTime:    time.Now(),
-		Attributes:  attributes,
-		ChildrenIDs: make([]string, 0),
+		callTime:    time.Now(),
+		attributes:  attributes,
+		childrenIDs: make([]string, 0),
 	}
 	return n
 }
 
 func (n *Node) GetCallTime() time.Time {
-	return n.CallTime
+	return n.callTime
 }
 
 func (n *Node) IsDirty() bool {
@@ -37,18 +37,18 @@ func (n *Node) MakeDirty() {
 }
 
 func (n *Node) GetID() string {
-	n.CallTime = time.Now()
-	return n.Attributes["_id"].(string)
+	n.callTime = time.Now()
+	return n.attributes["_id"].(string)
 }
 
 func (n *Node) GetName() string {
-	n.CallTime = time.Now()
-	return n.Attributes["name"].(string)
+	n.callTime = time.Now()
+	return n.attributes["name"].(string)
 }
 
 func (n *Node) GetParentID() string {
-	n.CallTime = time.Now()
-	if parentID, ok := n.Attributes["parent"]; ok {
+	n.callTime = time.Now()
+	if parentID, ok := n.attributes["parent"]; ok {
 		return parentID.(string)
 	} else {
 		return ""
@@ -56,35 +56,35 @@ func (n *Node) GetParentID() string {
 }
 
 func (n *Node) GetChildIDs() []string {
-	n.CallTime = time.Now()
-	return n.ChildrenIDs
+	n.callTime = time.Now()
+	return n.childrenIDs
 }
 
 func (n *Node) GetParam(name string) (any, error) {
-	n.CallTime = time.Now()
-	if param, ok := n.Attributes[name]; ok {
+	n.callTime = time.Now()
+	if param, ok := n.attributes[name]; ok {
 		return param, nil
 	} else {
-		return nil, fmt.Errorf("node (ID: %s, Name: %s) does not have attribute named %s", n.Attributes["_id"], n.Attributes["nam"], name)
+		return nil, fmt.Errorf("node (ID: %s, Name: %s) does not have attribute named %s", n.attributes["_id"], n.attributes["nam"], name)
 	}
 }
 
 func (n *Node) AddChild(childID string) {
 	// Do not update calltime for this AddChild is not called for functional using by outside.
-	n.ChildrenIDs = append(n.ChildrenIDs, childID)
+	n.childrenIDs = append(n.childrenIDs, childID)
 }
 
 func (n *Node) UpdateAttribute(name string, update any) (any, error) {
 	n.dirty.Store(true)
-	n.CallTime = time.Now()
-	old, ok := n.Attributes[name]
+	n.callTime = time.Now()
+	old, ok := n.attributes[name]
 	if !ok {
-		return nil, fmt.Errorf("node (ID: %s, Name: %s) does not hanve attribute named %s", n.Attributes["_id"], n.Attributes["nam"], name)
+		return nil, fmt.Errorf("node (ID: %s, Name: %s) does not hanve attribute named %s", n.attributes["_id"], n.attributes["nam"], name)
 	}
-	n.Attributes[name] = update
+	n.attributes[name] = update
 	return old, nil
 }
 
 func (n *Node) Serialize() map[string]any {
-	return n.Attributes
+	return n.attributes
 }

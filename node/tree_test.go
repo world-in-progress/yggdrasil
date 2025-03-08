@@ -3,17 +3,21 @@ package node
 import (
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/spf13/viper"
 	"github.com/world-in-progress/yggdrasil/db/mongo"
 )
 
+// instance of model BaseNode
 var testNode = map[string]any{
 	"name": "Test Node",
 }
 
+// instance of model ExtendNode
 var testChildNode = map[string]any{
 	"name": "Test Child Node",
+	"time": time.Now().String(),
 }
 
 func TestTree(t *testing.T) {
@@ -30,7 +34,7 @@ func TestTree(t *testing.T) {
 	var childID string
 
 	// register test node
-	if nodeID, err = tree.RegisterNode(testNode); err != nil {
+	if nodeID, err = tree.RegisterNode("BaseNode", testNode); err != nil {
 		t.Errorf("%v", err)
 	}
 
@@ -42,7 +46,7 @@ func TestTree(t *testing.T) {
 	// and test node will be auto-deactivated
 	// for its last calltime is earlier than test child node
 	testChildNode["parent"] = nodeID
-	if childID, err = tree.RegisterNode(testChildNode); err != nil {
+	if childID, err = tree.RegisterNode("ExtendNode", testChildNode); err != nil {
 		t.Errorf("%v", err)
 	}
 

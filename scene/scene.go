@@ -93,7 +93,7 @@ func (sm *SceneManager) RegisterNode(nodeInfo map[string]any) (string, error) {
 
 	// instantiate the node
 	n := node.NewNode(nodeInfo)
-	n.Attributes["_id"] = uuid.New().String()
+	// n.Attributes["_id"] = uuid.New().String()
 
 	// insert node to repository
 	if _, err := sm.Repository.Create(context.Background(), "node", n.Serialize()); err != nil {
