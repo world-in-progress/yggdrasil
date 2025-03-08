@@ -1,0 +1,29 @@
+{
+    "models": [
+        {
+            "name": "MongoDocument",
+            "fields": {
+                "_id": {"type": "string"},
+                "name": {"type": "string", "required": true}
+            }
+        },
+        {
+            "name": "BaseNode",
+            "extends": "MongoDocument",
+            "fields": {
+                "parent": {"type": "string"},
+                "components": { 
+                    "type": "array",
+                    "item": {"type": "string"}
+                }
+            }
+        },
+        {
+            "name": "ExtendNode",
+            "extends": "BaseNode",
+            "fields": {
+                "time": {"type": "string"}
+            }
+        }
+    ]
+}
