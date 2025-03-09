@@ -1,0 +1,37 @@
+{
+    "models": [
+        {
+            "name": "MongoDocument",
+            "fields": {
+                "_id": {"type": "string"},
+                "name": {"type": "string", "required": true}
+            }
+        },
+        {
+            "name": "ParamDescription",
+            "fields": {
+                "param": {"type": "string"},
+                "desc": {"type": "string"}
+            }
+        },
+        {
+            "name": "LocalCaller",
+            "fields": {
+                "path": {"type": "string", "required": true},
+                "params": {"type": "array", "item": {"type": "ParamDescription"}, "required": true}
+            }
+        },
+        {
+            "name": "RestfulComponent",
+            "extends": "MongoDocument",
+            "fields": {
+                "api": {"type": "string", "required": true},
+                "method": {"type": "string", "required": true},
+                "reqSchema": {"type": "string", "required": true},
+                "resSchema": {"type": "string", "required": true},
+                "reqParams": {"type": "array", "item": {"type": "ParamDescription"}, "required": true},
+                "resParams": {"type": "array", "item": {"type": "ParamDescription"}, "required": true}
+            }
+        }
+    ]
+}

@@ -75,7 +75,7 @@ func (t *Tree) RegisterNode(modelName string, nodeInfo map[string]any) (string, 
 	}
 
 	// active node
-	if err := t.ActivateNode(ID); err != nil {
+	if err := t.activateNode(ID); err != nil {
 		return "", fmt.Errorf("failed to active node: %v", err)
 	}
 	return ID, nil
@@ -88,7 +88,7 @@ func (t *Tree) GetNode(ID string) (*Node, error) {
 		return val.(*Node), nil
 	}
 
-	if err := t.ActivateNode(ID); err != nil {
+	if err := t.activateNode(ID); err != nil {
 		return nil, fmt.Errorf("failed to get node in repository: %v", err)
 	} else {
 		return t.GetNode(ID)
@@ -116,7 +116,7 @@ func (t *Tree) DeleteNode(ID string) error {
 	}
 
 	// deactivate
-	if err := t.DeactivateNode(ID); err != nil {
+	if err := t.deactivateNode(ID); err != nil {
 		return fmt.Errorf("failed to deactivate node: %v", err)
 	}
 
@@ -126,68 +126,6 @@ func (t *Tree) DeleteNode(ID string) error {
 		return fmt.Errorf("failed to delete node record: %v", err)
 	}
 
-	return nil
-}
-
-// ActivateNode activates a node from repository record to the runtime cache.
-func (t *Tree) ActivateNode(ID string) error {
-	// check if is active
-	if _, loaded := t.nodeCache.LoadOrStore(ID, nil); loaded {
-		return nil
-	}
-
-	// find if is in repository
-	ctx := context.Background()
-	nodeInfo, err := t.repo.ReadOne(ctx, "node", map[string]any{"_id": ID})
-	if err != nil {
-		t.nodeCache.Delete(ID)
-		return fmt.Errorf("cannot activate node not existing: %v", err)
-	}
-
-	// activate node
-	node := NewNode(nodeInfo)
-	t.nodeCache.Store(ID, node)
-
-	// record children ID through repository
-	if childInfos, err := t.repo.ReadAll(ctx, "node", map[string]any{"parent": ID}); err != nil {
-		t.nodeCache.Delete(ID)
-		return fmt.Errorf("failed to find children of node: %v", err)
-	} else {
-		for _, childInfo := range childInfos {
-			node.childrenIDs = append(node.childrenIDs, childInfo["_id"].(string))
-		}
-	}
-
-	// update ChildIDs of parent node
-	if parentID := node.GetParentID(); parentID != "" {
-		if val, loaded := t.nodeCache.Load(parentID); loaded {
-			val.(*Node).AddChild(ID)
-		}
-	}
-
-	return t.addToHeap(node)
-}
-
-// DeactivateNode deactivates a node from the runtime cache and updates its repository record.
-func (t *Tree) DeactivateNode(ID string) error {
-	// check if is inactive
-	val, loaded := t.nodeCache.LoadAndDelete(ID)
-	if !loaded {
-		return nil
-	}
-	node := val.(*Node)
-
-	// update node record in repository if is dirty
-	if node.IsDirty() {
-		ctx := context.Background()
-		if err := t.repo.Update(ctx, "node", map[string]any{"_id": ID}, map[string]any{"$set": node.Serialize()}); err != nil {
-			t.nodeCache.Store(ID, node) // rollback
-			return fmt.Errorf("failed to update node record in repository: %v", err)
-		}
-	}
-
-	// remove from heap
-	t.removeFromHeap(node)
 	return nil
 }
 
@@ -253,6 +191,68 @@ func (t *Tree) GetNodeRecordNum() (int64, error) {
 	} else {
 		return count, nil
 	}
+}
+
+// activateNode activates a node from repository record to the runtime cache.
+func (t *Tree) activateNode(ID string) error {
+	// check if is active
+	if _, loaded := t.nodeCache.LoadOrStore(ID, nil); loaded {
+		return nil
+	}
+
+	// find if is in repository
+	ctx := context.Background()
+	nodeInfo, err := t.repo.ReadOne(ctx, "node", map[string]any{"_id": ID})
+	if err != nil {
+		t.nodeCache.Delete(ID)
+		return fmt.Errorf("cannot activate node not existing: %v", err)
+	}
+
+	// activate node
+	node := NewNode(nodeInfo)
+	t.nodeCache.Store(ID, node)
+
+	// record children ID through repository
+	if childInfos, err := t.repo.ReadAll(ctx, "node", map[string]any{"parent": ID}); err != nil {
+		t.nodeCache.Delete(ID)
+		return fmt.Errorf("failed to find children of node: %v", err)
+	} else {
+		for _, childInfo := range childInfos {
+			node.childrenIDs = append(node.childrenIDs, childInfo["_id"].(string))
+		}
+	}
+
+	// update ChildIDs of parent node
+	if parentID := node.GetParentID(); parentID != "" {
+		if val, loaded := t.nodeCache.Load(parentID); loaded {
+			val.(*Node).AddChild(ID)
+		}
+	}
+
+	return t.addToHeap(node)
+}
+
+// deactivateNode deactivates a node from the runtime cache and updates its repository record.
+func (t *Tree) deactivateNode(ID string) error {
+	// check if is inactive
+	val, loaded := t.nodeCache.LoadAndDelete(ID)
+	if !loaded {
+		return nil
+	}
+	node := val.(*Node)
+
+	// update node record in repository if is dirty
+	if node.IsDirty() {
+		ctx := context.Background()
+		if err := t.repo.Update(ctx, "node", map[string]any{"_id": ID}, map[string]any{"$set": node.Serialize()}); err != nil {
+			t.nodeCache.Store(ID, node) // rollback
+			return fmt.Errorf("failed to update node record in repository: %v", err)
+		}
+	}
+
+	// remove from heap
+	t.removeFromHeap(node)
+	return nil
 }
 
 func (t *Tree) shrinkLocked() error {

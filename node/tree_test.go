@@ -7,7 +7,7 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/world-in-progress/yggdrasil/db/mongo"
-	"github.com/world-in-progress/yggdrasil/model"
+	"github.com/world-in-progress/yggdrasil/node/model"
 )
 
 // instance of model BaseNode
@@ -64,7 +64,7 @@ func TestTree(t *testing.T) {
 	}
 
 	// deactivate test child node
-	if err := tree.DeactivateNode(childID); err != nil {
+	if err := tree.deactivateNode(childID); err != nil {
 		t.Fatalf("cannot deactivate node: %v", err)
 	}
 
