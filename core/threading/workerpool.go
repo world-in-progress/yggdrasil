@@ -2,7 +2,7 @@ package threading
 
 import (
 	"fmt"
-	"strconv"
+	"sync"
 	"time"
 )
 
@@ -10,30 +10,37 @@ import (
 var ErrProcessTimeout = fmt.Errorf("process error: timed out")
 
 type (
+	// ITask is the interface for a worker task.
+	ITask interface {
+		GetID() string
+		Process() error
+		Cancel() bool
+		Complete()
+		IsCanceled() bool
+		IsCompleted() bool
+		IsIgnoreable() bool
+	}
+
 	WorkerPool struct {
-		tasks   chan ITask
-		workers chan struct{}
+		minWorkerNum int
+		tasks        chan ITask
+		tokens       chan struct{}
+		mu           sync.RWMutex
 	}
 )
 
-func NewWorkerPool(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *WorkerPool {
-	if spawnWorkerNum <= 0 && bufferSize > 0 {
-		panic("dead queue configuration detected")
-	}
-	if spawnWorkerNum > maxWorkerNum {
-		panic("spawn worker num larger than max worker num")
-	}
+func NewWorkerPool(minWorkerNum int, maxWorkerNum int, bufferSize int) *WorkerPool {
 
 	wp := &WorkerPool{
-		tasks:   make(chan ITask, bufferSize),
-		workers: make(chan struct{}, maxWorkerNum),
+		minWorkerNum: minWorkerNum,
+		tasks:        make(chan ITask, bufferSize),
+		tokens:       make(chan struct{}, maxWorkerNum),
 	}
 
-	for range spawnWorkerNum {
-		wp.workers <- struct{}{}
-		NewWorker(strconv.Itoa(len(wp.workers)), wp.tasks, nil)
+	for range minWorkerNum {
+		wp.tokens <- struct{}{}
+		NewWorker(wp.tasks, wp.tokens, nil)
 	}
-
 	return wp
 }
 
@@ -44,11 +51,13 @@ func (wp *WorkerPool) Shutdown() {
 		task.Cancel()
 	}
 
-	for range len(wp.workers) {
-		<-wp.workers
-	}
+	close(wp.tokens)
+}
 
-	close(wp.workers)
+func (wp *WorkerPool) GetWorkerCount() int {
+	wp.mu.RLocker().Lock()
+	defer wp.mu.RUnlock()
+	return len(wp.tokens)
 }
 
 func (wp *WorkerPool) Submit(task ITask) (TaskCancelFunc, error) {
@@ -60,16 +69,17 @@ func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task ITask) (TaskCanc
 }
 
 func (wp *WorkerPool) process(task ITask, timeout <-chan time.Time) (TaskCancelFunc, error) {
+	if timeout == nil {
+		timeout = make(chan time.Time)
+	}
 
 	select {
 	case <-timeout:
 		return nil, ErrProcessTimeout
-
 	case wp.tasks <- task:
 		return task.Cancel, nil
-
-	case wp.workers <- struct{}{}:
-		NewWorker(strconv.Itoa(len(wp.workers)), wp.tasks, task)
+	case wp.tokens <- struct{}{}:
+		NewWorker(wp.tasks, wp.tokens, task)
 		return task.Cancel, nil
 	}
 }

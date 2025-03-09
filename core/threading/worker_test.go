@@ -20,7 +20,7 @@ type mockedWorkerTask struct {
 func NewMockedWorkerTask(taskID string) ITask {
 	return &mockedWorkerTask{
 		BaseTask: BaseTask{
-			ID: taskID,
+			id: taskID,
 		},
 	}
 }
@@ -48,8 +48,9 @@ func BenchmarkWorker(b *testing.B) {
 		workerNum := runtime.NumCPU() * 2
 		workers := make([]*Worker, workerNum)
 		taskChan := make(chan ITask, workerNum*100)
+		tokenChan := make(chan struct{}, workerNum*100)
 		for index := range workerNum {
-			workers[index] = NewWorker(strconv.Itoa(index), taskChan, nil)
+			workers[index] = NewWorker(taskChan, tokenChan, nil)
 		}
 
 		for b.Loop() {

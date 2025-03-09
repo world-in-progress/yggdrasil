@@ -4,14 +4,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/world-in-progress/yggdrasil/component"
-	"github.com/world-in-progress/yggdrasil/component/restfulcomponent"
 	"github.com/world-in-progress/yggdrasil/core/logger"
 	"github.com/world-in-progress/yggdrasil/core/threading"
 	"github.com/world-in-progress/yggdrasil/db/mongo"
-	"github.com/world-in-progress/yggdrasil/model"
 	"github.com/world-in-progress/yggdrasil/node"
+	"github.com/world-in-progress/yggdrasil/node/model"
 )
 
 type (
@@ -53,33 +51,33 @@ func NewSceneManager(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *Scen
 	return sm
 }
 
-func (sm *SceneManager) RegisterComponent(componentInfo map[string]any) (string, error) {
-	// check validation
-	if err := sm.Modeler.Validate("Component", componentInfo); err != nil {
-		return "", fmt.Errorf("componentInfo %v provided for registration is invalid: %v", componentInfo, err)
-	}
+// func (sm *SceneManager) RegisterComponent(componentInfo map[string]any) (string, error) {
+// 	// check validation
+// 	if err := sm.Modeler.Validate("Component", componentInfo); err != nil {
+// 		return "", fmt.Errorf("componentInfo %v provided for registration is invalid: %v", componentInfo, err)
+// 	}
 
-	// TODO: check if component is existed
-	// TODO: check if cache is full
-	// TODO: clean cache if needed
+// 	// TODO: check if component is existed
+// 	// TODO: check if cache is full
+// 	// TODO: clean cache if needed
 
-	// instantiate the component
-	var c IComponent
-	if _, ok := componentInfo["rest"]; ok {
-		restC := restfulcomponent.NewRestfulComponent(componentInfo)
-		restC.Attributes["_id"] = uuid.New().String()
-		c = restC
-	}
+// 	// instantiate the component
+// 	var c IComponent
+// 	if _, ok := componentInfo["rest"]; ok {
+// 		restC := restfulcomponent.NewRestfulComponent(componentInfo)
+// 		// restC.Attributes["_id"] = uuid.New().String()
+// 		c = restC
+// 	}
 
-	// insert component to repository
-	if _, err := sm.Repository.Create(context.Background(), "component", c.Serialize()); err != nil {
-		return "", fmt.Errorf("failed to create node %v: %v", componentInfo, err)
-	}
+// 	// insert component to repository
+// 	if _, err := sm.Repository.Create(context.Background(), "component", c.Serialize()); err != nil {
+// 		return "", fmt.Errorf("failed to create node %v: %v", componentInfo, err)
+// 	}
 
-	// add component to cache
-	sm.ComponentCache[c.GetID()] = c
-	return c.GetID(), nil
-}
+// 	// add component to cache
+// 	sm.ComponentCache[c.GetID()] = c
+// 	return c.GetID(), nil
+// }
 
 func (sm *SceneManager) RegisterNode(nodeInfo map[string]any) (string, error) {
 	// check validation

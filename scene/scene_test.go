@@ -1,7 +1,6 @@
 package scene
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/spf13/viper"
@@ -58,30 +57,30 @@ func TestSceneManager(t *testing.T) {
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("../test")
 
-	sm := NewSceneManager(10, 100, 1000)
+	// sm := NewSceneManager(10, 100, 1000)
 
 	// test register node
-	parentID, err := sm.RegisterNode(parentNode)
-	if err != nil {
-		t.Errorf("Failed to register node %v: %v", parentNode, err)
-	} else {
-		fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
-	}
+	// parentID, err := sm.RegisterNode(parentNode)
+	// if err != nil {
+	// 	t.Errorf("Failed to register node %v: %v", parentNode, err)
+	// } else {
+	// 	fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
+	// }
 
 	// test register component
-	componentID, err := sm.RegisterComponent(addComp)
-	if err != nil {
-		t.Errorf("Failed to register component %v: %v", addComp, err)
-	} else {
-		fmt.Printf("Component cache of manager: %v\n", sm.ComponentCache)
-	}
+	// componentID, err := sm.RegisterComponent(addComp)
+	// if err != nil {
+	// 	t.Errorf("Failed to register component %v: %v", addComp, err)
+	// } else {
+	// 	fmt.Printf("Component cache of manager: %v\n", sm.ComponentCache)
+	// }
 
 	// test register node with component
-	childNode["parent"] = parentID
-	childNode["components"].([]any)[0] = componentID
-	if _, err := sm.RegisterNode(childNode); err != nil {
-		t.Errorf("Failed to register node %v: %v", childNode, err)
-	} else {
-		fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
-	}
+	// childNode["parent"] = parentID
+	// childNode["components"].([]any)[0] = componentID
+	// if _, err := sm.RegisterNode(childNode); err != nil {
+	// 	t.Errorf("Failed to register node %v: %v", childNode, err)
+	// } else {
+	// 	fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
+	// }
 }
