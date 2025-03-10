@@ -165,44 +165,103 @@ var restfulDefaultComponent = map[string]any{
 	},
 }
 
-func TestRestfulComponent(t *testing.T) {
+var restfulCreateNodeComponent = map[string]any{
+	"_id":         "6",
+	"method":      "POST",
+	"name":        "Register Node API",
+	"description": "Create nodes",
+	"api":         "http://127.0.0.1:8000/api/v0/node",
+	"reqSchema":   "application/json",
+	"reqParams": []any{
+		map[string]any{
+			"name":        "name",
+			"description": "Node name",
+			"type":        "string",
+			"kind":        "simple",
+			"required":    true,
+		},
+	},
+	"resStatuses": []any{
+		map[string]any{
+			"code":        200,
+			"description": "Node created successfully",
+			"schema":      "application/json",
+			"params": []any{
+				map[string]any{
+					"name":        "_id",
+					"description": "Node id",
+					"type":        "string",
+				},
+			},
+		},
+	},
+}
+
+func TestRestfulSchema(t *testing.T) {
 	// test API having nested JSON
-	userComponent, err := NewRestfulComponent(restfulCreateTagsComponent)
+	userComponentSchema, err := NewRestfulComponent(restfulCreateTagsComponent)
 	if err != nil {
-		fmt.Println("Error creating user component:", err)
+		t.Fatalf("Error creating user component: %v\n\n\n", err)
 		return
 	}
-	fmt.Printf("User Component: %+v\n", userComponent)
+	fmt.Printf("User Component: %+v\n\n\n", userComponentSchema)
 
 	// test API having array
-	itemsComponent, err := NewRestfulComponent(restfulCreateItemsComponent)
+	itemsComponentSchema, err := NewRestfulComponent(restfulCreateItemsComponent)
 	if err != nil {
-		fmt.Println("Error creating items component:", err)
+		t.Fatalf("Error creating items component: %v\n\n\n", err)
 		return
 	}
-	fmt.Printf("Items Component: %+v\n", itemsComponent)
+	fmt.Printf("Items Component: %+v\n\n\n", itemsComponentSchema)
 
 	// test invalid HttpMethod
-	invalidMethodComponent, err := NewRestfulComponent(restfulInvalidMethodComponent)
+	invalidMethodComponentSchema, err := NewRestfulComponent(restfulInvalidMethodComponent)
 	if err != nil {
-		fmt.Println("Error creating invalid method component:", err)
+		fmt.Printf("Error creating invalid method component: %v\n\n\n", err)
 	} else {
-		fmt.Printf("Invalid Method Component: %+v\n", invalidMethodComponent)
+		t.Fatalf("Invalid Method Component: %+v\n\n\n", invalidMethodComponentSchema)
 	}
 
 	// test invalid ParamKind
-	invalidKindComponent, err := NewRestfulComponent(restfulInvalidKindComponent)
+	invalidKindComponentSchema, err := NewRestfulComponent(restfulInvalidKindComponent)
 	if err != nil {
-		fmt.Println("Error creating invalid kind component:", err)
+		fmt.Printf("Error creating invalid kind component: %v\n\n\n", err)
 	} else {
-		fmt.Printf("Invalid Kind Component: %+v\n", invalidKindComponent)
+		t.Fatalf("Invalid Kind Component: %+v\n\n\n", invalidKindComponentSchema)
 	}
 
 	// testing default value handling
-	defaultComponent, err := NewRestfulComponent(restfulDefaultComponent)
+	defaultComponentSchema, err := NewRestfulComponent(restfulDefaultComponent)
 	if err != nil {
-		fmt.Println("Error creating default component:", err)
+		t.Fatalf("Error creating default component: %v\n\n\n", err)
 	} else {
-		fmt.Printf("Default Component: %+v\n", defaultComponent)
+		fmt.Printf("Default Component: %+v\n\n\n", defaultComponentSchema)
+	}
+}
+
+func TestRestfulComponent(t *testing.T) {
+	// check if component schema is valid
+	nodeComponentSchema, err := NewRestfulComponent(restfulCreateNodeComponent)
+	if err != nil {
+		t.Fatalf("Error creating invalid kind component: %v\n\n\n", err)
+	} else {
+		fmt.Printf("%v", nodeComponentSchema)
+	}
+
+	// test create node component
+	nodeComponnet, err := NewRestfulComponentInstance(restfulCreateNodeComponent)
+	if err != nil {
+		t.Fatalf("Error creating node component: %v\n\n\n", err)
+	} else {
+		fmt.Printf("Node Component: %+v\n\n\n", nodeComponnet)
+	}
+	testParams := map[string]any{
+		"name": "Root Node",
+	}
+	result, err := nodeComponnet.Execute(nil, testParams, nil, nil)
+	if err != nil {
+		t.Fatalf("Error executing node component: %v\n\n\n", err)
+	} else {
+		fmt.Printf("Get Response: %+v\n", result)
 	}
 }

@@ -60,12 +60,12 @@ func (n *Node) GetChildIDs() []string {
 	return n.childrenIDs
 }
 
-func (n *Node) GetParam(name string) (any, error) {
+func (n *Node) GetParam(name string) any {
 	n.callTime = time.Now()
 	if param, ok := n.attributes[name]; ok {
-		return param, nil
+		return param
 	} else {
-		return nil, fmt.Errorf("node (ID: %s, Name: %s) does not have attribute named %s", n.attributes["_id"], n.attributes["nam"], name)
+		return nil
 	}
 }
 

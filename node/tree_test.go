@@ -7,7 +7,6 @@ import (
 
 	"github.com/spf13/viper"
 	"github.com/world-in-progress/yggdrasil/db/mongo"
-	"github.com/world-in-progress/yggdrasil/node/model"
 )
 
 // instance of model BaseNode
@@ -36,11 +35,10 @@ func TestTree(t *testing.T) {
 	var err error
 	var cacheSize uint = 1 // only one node can be stored in the runtime cache
 	repo := mongo.NewMongoRepository()
-	modeler, err := model.NewModelManager()
+	tree, err := NewTree("Test tree", repo, cacheSize)
 	if err != nil {
-		t.Fatalf("Failed to create model manager for Tree: %v", err)
+		t.Fatal(err)
 	}
-	tree := NewTree("Test tree", repo, modeler, cacheSize)
 
 	// start test
 	var nodeID string
