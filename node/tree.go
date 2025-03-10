@@ -8,6 +8,7 @@ import (
 	"sync"
 
 	"github.com/google/uuid"
+	nodemodel "github.com/world-in-progress/yggdrasil/node/model"
 )
 
 type (
@@ -18,12 +19,6 @@ type (
 		Update(ctx context.Context, table string, filter map[string]any, update map[string]any) error
 		Delete(ctx context.Context, table string, filter map[string]any) error
 		Count(ctx context.Context, table string, filter map[string]any) (int64, error)
-	}
-
-	IModelManager interface {
-		HasModel(modelName string) bool
-		Validate(modelName string, data map[string]any) error
-		ValidateField(modelName string, filedName string, data any) error
 	}
 
 	nodeEntry struct {
@@ -38,23 +33,29 @@ type (
 		nodeCache sync.Map
 		heap      nodeHeap
 		repo      IRepository
-		modeler   IModelManager
+		modeler   *nodemodel.ModelManager
 
 		mu sync.RWMutex
 	}
 )
 
-func NewTree(name string, repo IRepository, modeler IModelManager, cacheSize uint) *Tree {
+func NewTree(name string, repo IRepository, cacheSize uint) (*Tree, error) {
 	t := &Tree{
 		repo:      repo,
-		modeler:   modeler,
 		nodeCache: sync.Map{},
 		cacheSize: int(cacheSize),
 		heap:      make(nodeHeap, 0),
 	}
 
+	// add node model manager
+	modeler, err := nodemodel.NewModelManager()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create model manager for Tree: %v", err)
+	}
+	t.modeler = modeler
+
 	heap.Init(&t.heap)
-	return t
+	return t, nil
 }
 
 // RegisterNode records node information to repository and activates the node in the runtime cache.
@@ -132,7 +133,7 @@ func (t *Tree) DeleteNode(ID string) error {
 func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
 	// get model name
 	var modelName string
-	if infos := strings.Split(ID, "-"); len(infos) != 5 {
+	if infos := strings.Split(ID, "-"); len(infos) != 6 {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
 		modelName = infos[0]
@@ -236,7 +237,7 @@ func (t *Tree) activateNode(ID string) error {
 func (t *Tree) deactivateNode(ID string) error {
 	// check if is inactive
 	val, loaded := t.nodeCache.LoadAndDelete(ID)
-	if !loaded {
+	if !loaded || val == nil {
 		return nil
 	}
 	node := val.(*Node)
@@ -261,6 +262,11 @@ func (t *Tree) shrinkLocked() error {
 		toSize = 1
 	}
 
+	if t.heap.Len() <= t.cacheSize {
+		return nil
+	}
+
+	heap.Init(&t.heap)
 	for t.heap.Len() > toSize {
 
 		// remove from heap
