@@ -1,55 +1,43 @@
 package scene
 
-import (
-	"context"
-	"fmt"
+// type (
+// 	IComponent interface {
+// 		GetID() string
+// 		Execute(node component.INode, params map[string]any) component.ITask
+// 		Serialize() map[string]any
+// 	}
 
-	"github.com/world-in-progress/yggdrasil/component"
-	"github.com/world-in-progress/yggdrasil/core/logger"
-	"github.com/world-in-progress/yggdrasil/core/threading"
-	"github.com/world-in-progress/yggdrasil/db/mongo"
-	"github.com/world-in-progress/yggdrasil/node"
-	"github.com/world-in-progress/yggdrasil/node/model"
-)
+// 	IRepository interface {
+// 		Create(ctx context.Context, table string, record any) (string, error)
+// 		Read(ctx context.Context, table string, filter any) (map[string]any, error)
+// 		Update(ctx context.Context, table string, filter any, update any) error
+// 		Delete(ctx context.Context, table string, filter any) error
+// 	}
 
-type (
-	IComponent interface {
-		GetID() string
-		Execute(node component.INode, params map[string]any) component.ITask
-		Serialize() map[string]any
-	}
+// 	SceneManager struct {
+// 		Dispatcher     *threading.WorkerPool
+// 		Modeler        *nodemodel.ModelManager
+// 		NodeCache      map[string]component.INode
+// 		ComponentCache map[string]IComponent
+// 		Repository     *mongo.MongoRepository
+// 	}
+// )
 
-	IRepository interface {
-		Create(ctx context.Context, table string, record any) (string, error)
-		Read(ctx context.Context, table string, filter any) (map[string]any, error)
-		Update(ctx context.Context, table string, filter any, update any) error
-		Delete(ctx context.Context, table string, filter any) error
-	}
+// func NewSceneManager(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *SceneManager {
+// 	sm := &SceneManager{
+// 		Dispatcher:     threading.NewWorkerPool(spawnWorkerNum, maxWorkerNum, bufferSize),
+// 		NodeCache:      make(map[string]component.INode),
+// 		ComponentCache: make(map[string]IComponent),
+// 		Repository:     mongo.NewMongoRepository(),
+// 	}
 
-	SceneManager struct {
-		Dispatcher     *threading.WorkerPool
-		Modeler        *model.ModelManager
-		NodeCache      map[string]component.INode
-		ComponentCache map[string]IComponent
-		Repository     *mongo.MongoRepository
-	}
-)
-
-func NewSceneManager(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *SceneManager {
-	sm := &SceneManager{
-		Dispatcher:     threading.NewWorkerPool(spawnWorkerNum, maxWorkerNum, bufferSize),
-		NodeCache:      make(map[string]component.INode),
-		ComponentCache: make(map[string]IComponent),
-		Repository:     mongo.NewMongoRepository(),
-	}
-
-	var err error
-	sm.Modeler, err = model.NewModelManager()
-	if err != nil {
-		logger.Error("Failed to create model manager for scene manager: %v", err)
-	}
-	return sm
-}
+// 	var err error
+// 	sm.Modeler, err = nodemodel.NewModelManager()
+// 	if err != nil {
+// 		logger.Error("Failed to create model manager for scene manager: %v", err)
+// 	}
+// 	return sm
+// }
 
 // func (sm *SceneManager) RegisterComponent(componentInfo map[string]any) (string, error) {
 // 	// check validation
@@ -79,26 +67,26 @@ func NewSceneManager(spawnWorkerNum int, maxWorkerNum int, bufferSize int) *Scen
 // 	return c.GetID(), nil
 // }
 
-func (sm *SceneManager) RegisterNode(nodeInfo map[string]any) (string, error) {
-	// check validation
-	if err := sm.Modeler.Validate("Node", nodeInfo); err != nil {
-		return "", fmt.Errorf("nodeInfo %v provided for registration is invalid: %v", nodeInfo, err)
-	}
+// func (sm *SceneManager) RegisterNode(nodeInfo map[string]any) (string, error) {
+// 	// check validation
+// 	if err := sm.Modeler.Validate("Node", nodeInfo); err != nil {
+// 		return "", fmt.Errorf("nodeInfo %v provided for registration is invalid: %v", nodeInfo, err)
+// 	}
 
-	// TODO: check if node is existed
-	// TODO: check if cache is full
-	// TODO: clean cache if needed
+// 	// TODO: check if node is existed
+// 	// TODO: check if cache is full
+// 	// TODO: clean cache if needed
 
-	// instantiate the node
-	n := node.NewNode(nodeInfo)
-	// n.Attributes["_id"] = uuid.New().String()
+// 	// instantiate the node
+// 	n := node.NewNode(nodeInfo)
+// 	// n.Attributes["_id"] = uuid.New().String()
 
-	// insert node to repository
-	if _, err := sm.Repository.Create(context.Background(), "node", n.Serialize()); err != nil {
-		return "", fmt.Errorf("failed to create node %v: %v", nodeInfo, err)
-	}
+// 	// insert node to repository
+// 	if _, err := sm.Repository.Create(context.Background(), "node", n.Serialize()); err != nil {
+// 		return "", fmt.Errorf("failed to create node %v: %v", nodeInfo, err)
+// 	}
 
-	// add node to cache
-	sm.NodeCache[n.GetID()] = n
-	return n.GetID(), nil
-}
+// 	// add node to cache
+// 	sm.NodeCache[n.GetID()] = n
+// 	return n.GetID(), nil
+// }

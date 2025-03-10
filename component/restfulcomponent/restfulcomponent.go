@@ -4,6 +4,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"time"
+
+	"github.com/google/uuid"
+	componentinterface "github.com/world-in-progress/yggdrasil/component/interface"
 )
 
 type (
@@ -39,6 +43,8 @@ type (
 		ReqParams   []ParamDescription `json:"reqParams,omitempty"`
 		ResStatuses []ResponseStatus   `json:"resStatuses,omitempty"`
 		Deprecated  bool               `json:"deprecated,omitempty"`
+
+		callTime time.Time
 	}
 )
 
@@ -81,14 +87,26 @@ var (
 	}
 )
 
-func NewRestfulComponent(attributes map[string]any) (*RestfulComponent, error) {
-	c, err := convertToStruct[*RestfulComponent](attributes)
+func NewRestfulComponentInstance(componentInfo map[string]any) (*RestfulComponent, error) {
+	if c, err := convertToStruct[*RestfulComponent](componentInfo); err != nil {
+		return nil, fmt.Errorf("faied to build restful component: %v", err)
+	} else {
+		c.callTime = time.Now()
+		return c, nil
+	}
+}
+
+func NewRestfulComponent(schema map[string]any) (map[string]any, error) {
+	c, err := convertToStruct[*RestfulComponent](schema)
 	if err != nil {
 		return nil, fmt.Errorf("faied to build restful component: %v", err)
 	}
 
+	// calculate uuid for this new schema
+	c.ID = "RESTFUL" + "-" + uuid.New().String()
+
 	// verify required fields
-	if c.ID == "" || c.Name == "" || c.API == "" || c.Method == "" {
+	if c.Name == "" || c.API == "" || c.Method == "" {
 		return nil, fmt.Errorf("missing required fields: ID, Name, API, or Method")
 	}
 
@@ -116,10 +134,41 @@ func NewRestfulComponent(attributes map[string]any) (*RestfulComponent, error) {
 		}
 	}
 
-	return c, nil
+	// convert component to map
+	if schema, err := convertToMap(c); err != nil {
+		return nil, fmt.Errorf("failed to build component schema in type of map: %v", err)
+	} else {
+		return schema, nil
+	}
 }
 
-func (c *RestfulComponent) Execute(params map[string]any, client *http.Client, headers map[string]string) (map[string]any, error) {
+func (c *RestfulComponent) GetID() string {
+	c.callTime = time.Now()
+	return c.ID
+}
+
+func (c *RestfulComponent) GetName() string {
+	c.callTime = time.Now()
+	return c.Name
+}
+
+func (c *RestfulComponent) GetCallTime() time.Time {
+	return c.callTime
+}
+
+func (c *RestfulComponent) Execute(node componentinterface.INode, params map[string]any, client *http.Client, headers map[string]string) (map[string]any, error) {
+	// overwrite specific param by node attribute if not provided by params
+	if node != nil {
+		for _, reqParam := range c.ReqParams {
+			paramName := reqParam.Name
+			_, exists := params[paramName]
+			attribute := node.GetParam(paramName)
+			if !exists && attribute != nil {
+				params[paramName] = attribute
+			}
+		}
+	}
+
 	validator := &ParameterValidator{}
 	if err := validator.Validate(c, params); err != nil {
 		return nil, err
@@ -210,17 +259,29 @@ func convertToStruct[T any](source any) (T, error) {
 
 	bytes, err := json.Marshal(source)
 	if err != nil {
-		return result, fmt.Errorf("marshal error: %v", err)
+		return result, fmt.Errorf("marshal error when transfer source to component: %v", err)
 	}
 
 	err = json.Unmarshal(bytes, &result)
 	if err != nil {
-		return result, fmt.Errorf("unmarshal error: %v", err)
+		return result, fmt.Errorf("unmarshal error source to component: %v", err)
 	}
 
 	return result, nil
 }
 
-func (c *RestfulComponent) GetID() string {
-	return c.ID
+func convertToMap[T any](component T) (map[string]any, error) {
+	var result map[string]any
+
+	bytes, err := json.Marshal(component)
+	if err != nil {
+		return result, fmt.Errorf("marshal error when transfer component to map %v", err)
+	}
+
+	err = json.Unmarshal(bytes, &result)
+	if err != nil {
+		return result, fmt.Errorf("unmarshal error when transfer component to map %v", err)
+	}
+
+	return result, nil
 }
