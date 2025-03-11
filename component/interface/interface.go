@@ -34,6 +34,7 @@ type (
 		IsIgnoreable() bool
 	}
 
+	// IRepository is the interface for CRUD operations of some repository.
 	IRepository interface {
 		Create(ctx context.Context, table string, record map[string]any) (string, error)
 		ReadOne(ctx context.Context, table string, filter map[string]any) (map[string]any, error)

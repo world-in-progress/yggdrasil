@@ -13,8 +13,8 @@ type (
 	// ITask is the interface for a worker task.
 	ITask interface {
 		GetID() string
-		Process() error
 		Cancel() bool
+		Process()
 		Complete()
 		IsCanceled() bool
 		IsCompleted() bool

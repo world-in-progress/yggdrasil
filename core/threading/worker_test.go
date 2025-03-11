@@ -20,12 +20,12 @@ type mockedWorkerTask struct {
 func NewMockedWorkerTask(taskID string) ITask {
 	return &mockedWorkerTask{
 		BaseTask: BaseTask{
-			id: taskID,
+			ID: taskID,
 		},
 	}
 }
 
-func (mwt *mockedWorkerTask) Process() error {
+func (mwt *mockedWorkerTask) Process() {
 	defer wg.Done()
 
 	for range 1000 {
@@ -34,8 +34,6 @@ func (mwt *mockedWorkerTask) Process() error {
 
 	taskCount.Add(1)
 	dataSum.Add(mwt.data)
-
-	return nil
 }
 
 func BenchmarkWorker(b *testing.B) {

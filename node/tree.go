@@ -86,7 +86,9 @@ func (t *Tree) RegisterNode(modelName string, nodeInfo map[string]any) (string, 
 func (t *Tree) GetNode(ID string) (*Node, error) {
 	// get node if it is active
 	if val, loaded := t.nodeCache.Load(ID); loaded {
-		return val.(*Node), nil
+		node := val.(*Node)
+		t.updateHeap(node)
+		return node, nil
 	}
 
 	if err := t.activateNode(ID); err != nil {
@@ -163,6 +165,66 @@ func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
 	updateData := map[string]any{"$set": map[string]any{name: update}}
 	if err := t.repo.Update(ctx, "node", filter, updateData); err != nil {
 		return fmt.Errorf("failed to update node record in repository: %v", err)
+	}
+	return nil
+}
+
+func (t *Tree) BindComponentToNode(ID, compoID string) error {
+	// get model name
+	var modelName string
+	if infos := strings.Split(ID, "-"); len(infos) != 6 {
+		return fmt.Errorf("provided ID %s is not valid", ID)
+	} else {
+		modelName = infos[0]
+		if !t.modeler.HasModel(modelName) {
+			return fmt.Errorf("model name %s is not declared in model manager", modelName)
+		}
+	}
+
+	// update cache if node is active
+	if val, ok := t.nodeCache.Load(ID); ok {
+		node := val.(*Node)
+		if added := node.AddComponent(compoID); added {
+			t.updateHeap(node)
+		}
+	}
+
+	// update repository record if node is inactive
+	ctx := context.Background()
+	filter := map[string]any{"_id": ID}
+	updateData := map[string]any{"$push": map[string]any{"components": compoID}}
+	if err := t.repo.Update(ctx, "node", filter, updateData); err != nil {
+		return fmt.Errorf("failed to update node components in repository: %v", err)
+	}
+	return nil
+}
+
+func (t *Tree) DeleteComponentFromNode(ID, compoID string) error {
+	// get model name
+	var modelName string
+	if infos := strings.Split(ID, "-"); len(infos) != 6 {
+		return fmt.Errorf("provided ID %s is not valid", ID)
+	} else {
+		modelName = infos[0]
+		if !t.modeler.HasModel(modelName) {
+			return fmt.Errorf("model name %s is not declared in model manager", modelName)
+		}
+	}
+
+	// delete in cache if node is active
+	if val, ok := t.nodeCache.Load(ID); ok {
+		node := val.(*Node)
+		if deleted := node.DeleteComponent(compoID); deleted {
+			t.updateHeap(node)
+		}
+	}
+
+	// delete in repository if node node is inactive
+	ctx := context.Background()
+	filter := map[string]any{"_id": ID}
+	updateData := map[string]any{"$pull": map[string]any{"components": compoID}}
+	if err := t.repo.Update(ctx, "node", filter, updateData); err != nil {
+		return fmt.Errorf("failed to delete node component in repository: %v", err)
 	}
 	return nil
 }
@@ -262,11 +324,6 @@ func (t *Tree) shrinkLocked() error {
 		toSize = 1
 	}
 
-	if t.heap.Len() <= t.cacheSize {
-		return nil
-	}
-
-	heap.Init(&t.heap)
 	for t.heap.Len() > toSize {
 
 		// remove from heap
