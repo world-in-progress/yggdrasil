@@ -90,13 +90,12 @@ type mockTerminateTask struct {
 func NewMockTerminateTask(id string, wg *sync.WaitGroup) *mockTerminateTask {
 	return &mockTerminateTask{
 		BaseTask: BaseTask{
-			id: id,
+			ID: id,
 		},
 		wg: wg,
 	}
 }
 
-func (m *mockTerminateTask) Process() error {
+func (m *mockTerminateTask) Process() {
 	m.wg.Done()
-	return nil
 }

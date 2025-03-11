@@ -3,13 +3,28 @@ package scene
 import (
 	"fmt"
 
+	"github.com/google/uuid"
 	"github.com/world-in-progress/yggdrasil/component"
+	componentinterface "github.com/world-in-progress/yggdrasil/component/interface"
 	"github.com/world-in-progress/yggdrasil/core/threading"
 	"github.com/world-in-progress/yggdrasil/db/mongo"
 	"github.com/world-in-progress/yggdrasil/node"
 )
 
 type (
+	TaskType string
+
+	// ITask is the interface for a worker task.
+	ITask interface {
+		GetID() string
+		Cancel() bool
+		Process()
+		Complete()
+		IsCanceled() bool
+		IsCompleted() bool
+		IsIgnoreable() bool
+	}
+
 	// Scene is the structure for a blackboard.
 	Scene struct {
 		Name       string
@@ -18,6 +33,12 @@ type (
 		Tree       *node.Tree
 		Components *component.ComponentManager
 	}
+)
+
+const (
+	Sync   TaskType = "SYNC"
+	Async  TaskType = "ASYNC"
+	Socket TaskType = "SOCKET"
 )
 
 func NewScene(name string, minWorkerNum, maxWorkerNum, bufferSize, cacheSize int) (*Scene, error) {
@@ -51,6 +72,14 @@ func (s *Scene) RegisterNode(modelName string, nodeInfo map[string]any) (string,
 	}
 }
 
+func (s *Scene) GetNode(ID string) (*node.Node, error) {
+	if node, err := s.Tree.GetNode(ID); err != nil {
+		return nil, fmt.Errorf("scene %v cannot get node %v: %v", s.Name, ID, err)
+	} else {
+		return node, nil
+	}
+}
+
 func (s *Scene) DeleteNode(ID string) error {
 	if err := s.Tree.DeleteNode(ID); err != nil {
 		return fmt.Errorf("scene %v cannot delete node %v: %v", s.Name, ID, err)
@@ -64,6 +93,14 @@ func (s *Scene) RegisterComponent(compoType component.ComponentType, compoSchema
 		return "", fmt.Errorf("scene %v cannot register component %v: %v", s.Name, compoSchema, err)
 	} else {
 		return ID, nil
+	}
+}
+
+func (s *Scene) GetComponnet(ID string) (componentinterface.IComponent, error) {
+	if compo, err := s.Components.GetComponent(ID); err != nil {
+		return nil, fmt.Errorf("scene %v cannot get componnet %v: %v", s.Name, ID, err)
+	} else {
+		return compo, nil
 	}
 }
 
@@ -129,8 +166,12 @@ func (s *Scene) DeleteComponentFromNode(nodeID, compoID string) error {
 	return nil
 }
 
-func (s *Scene) InvokeNodeComponent(nodeID, compoID string, params map[string]any, headers map[string]string) (any, error) {
+func (s *Scene) InvokeNodeComponent(taskType string, nodeID, compoID string, params map[string]any, headers map[string]string) (ITask, error) {
 	var err error
+
+	if params == nil {
+		params = map[string]any{}
+	}
 
 	// try get node
 	node, err := s.Tree.GetNode(nodeID)
@@ -144,9 +185,20 @@ func (s *Scene) InvokeNodeComponent(nodeID, compoID string, params map[string]an
 		return nil, fmt.Errorf("failed to get component by ID %v: %v", compoID, err)
 	}
 
-	result, err := compo.Execute(node, params, nil, headers)
-	if err != nil {
-		return nil, fmt.Errorf("error executing component %v of node %v: %v", compo.GetName(), node.GetName(), err)
+	// build task
+	var task ITask
+	taskID := uuid.New().String()
+	switch taskType {
+	case string(Sync):
+		task = NewSyncTask(taskID, s.Tree, node, compo, params, headers)
+		if _, err := s.Dispatcher.Submit(task); err != nil {
+			return nil, fmt.Errorf("failed to submit sync task: %v", err)
+		}
+
+	// TODO: implement other task type.
+	default:
+		return nil, fmt.Errorf("task type %v is not supported", taskType)
 	}
-	return result, nil
+
+	return task, nil
 }

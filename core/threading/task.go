@@ -7,7 +7,7 @@ import (
 type (
 	// BaseTask is the basic structure for a Task interface.
 	BaseTask struct {
-		id        string
+		ID        string
 		done      atomic.Bool
 		cancelled atomic.Bool
 	}
@@ -16,7 +16,7 @@ type (
 	TaskCancelFunc func() bool
 )
 
-func (bt *BaseTask) GetID() string      { return bt.id }
+func (bt *BaseTask) GetID() string      { return bt.ID }
 func (bt *BaseTask) Complete()          { bt.done.Store(true) }
 func (bt *BaseTask) IsCompleted() bool  { return bt.done.Load() }
 func (bt *BaseTask) IsCanceled() bool   { return bt.cancelled.Load() }

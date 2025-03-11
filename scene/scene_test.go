@@ -1,86 +1,106 @@
 package scene
 
 import (
+	"encoding/json"
+	"fmt"
+	"os"
+	"runtime"
 	"testing"
 
 	"github.com/spf13/viper"
+	"github.com/world-in-progress/yggdrasil/component"
 )
 
-var mongoDoc = map[string]any{
-	"_id":  "0",
-	"name": "Mongo Document",
-}
-
-var addAPI = map[string]any{
-	"api":       "localhost:8000/api/v0/add",
-	"method":    "POST",
-	"reqSchema": "application/json",
-	"resSchema": "application/json",
-	"reqParams": []any{
-		map[string]any{
-			"param": "a",
-			"desc":  "The addend, must be a number",
-		},
-		map[string]any{
-			"param": "b",
-			"desc":  "The summand, must be a number",
-		},
-	},
-	"resParams": []any{
-		map[string]any{
-			"param": "result",
-			"desc":  "The result, is a number",
-		},
-	},
-}
-
-var addComp = map[string]any{
-	"_id":  "0",
-	"name": "Add Component",
-	"rest": addAPI,
-}
-
-var parentNode = map[string]any{
-	"_id":  "0",
-	"name": "Parent Node",
-}
-
-var childNode = map[string]any{
-	"_id":        "0",
-	"name":       "Child Node",
-	"parent":     parentNode["_id"],
-	"components": []any{"0"},
-}
-
-func TestSceneManager(t *testing.T) {
+// NOTE
+// this test dependents on FastAPI (https://github.com/fastapi/fastapi)
+// come to current directory and
+// run the following command to launch the python test server:
+// fastapi dev server_test.py
+func TestScene(t *testing.T) {
 	viper.SetConfigName("test_config")
 	viper.SetConfigType("yaml")
 	viper.AddConfigPath("../test")
 
-	// sm := NewSceneManager(10, 100, 1000)
+	// read component schema from json
+	file, err := os.Open("component_schema_test.json")
+	if err != nil {
+		t.Fatalf("error opening file: %v", err)
+	}
+	defer file.Close()
 
-	// test register node
-	// parentID, err := sm.RegisterNode(parentNode)
-	// if err != nil {
-	// 	t.Errorf("Failed to register node %v: %v", parentNode, err)
-	// } else {
-	// 	fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
-	// }
+	var compoSchema map[string]any
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&compoSchema)
+	if err != nil {
+		t.Fatalf("error decoding json: %v", err)
+	}
 
-	// test register component
-	// componentID, err := sm.RegisterComponent(addComp)
-	// if err != nil {
-	// 	t.Errorf("Failed to register component %v: %v", addComp, err)
-	// } else {
-	// 	fmt.Printf("Component cache of manager: %v\n", sm.ComponentCache)
-	// }
+	fmt.Printf("component schema is: %+v\n\n\n", compoSchema)
 
-	// test register node with component
-	// childNode["parent"] = parentID
-	// childNode["components"].([]any)[0] = componentID
-	// if _, err := sm.RegisterNode(childNode); err != nil {
-	// 	t.Errorf("Failed to register node %v: %v", childNode, err)
-	// } else {
-	// 	fmt.Printf("Node cache of manager: %v\n", sm.NodeCache)
-	// }
+	// init scene
+	minWorkerNum := runtime.NumCPU()
+	maxWorkerNum := runtime.NumCPU() * 100
+	bufferSize := runtime.NumCPU() * 1000
+	cacheSize := runtime.NumCPU() * 1000
+	scene, err := NewScene("Test scene", minWorkerNum, maxWorkerNum, bufferSize, int(cacheSize))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// register component
+	compoID, err := scene.RegisterComponent(component.Restful, compoSchema)
+	if err != nil {
+		t.Fatalf("failed to register componnet: %v\n\n\n", err)
+	}
+
+	// register node
+	nodeInfo := map[string]any{
+		"name":   "Test Node",
+		"result": 0.0,
+	}
+	nodeID, err := scene.RegisterNode("SumNode", nodeInfo)
+	if err != nil {
+		t.Fatalf("failed to register node: %vn\n\n", err)
+	}
+
+	// bind componnet to node
+	err = scene.BindComponentToNode(nodeID, compoID)
+	if err != nil {
+		t.Fatalf("failed to bind component to node: %v\n\n\n", err)
+	}
+
+	// invoke node component
+	testParams := map[string]any{
+		"a": 0.1,
+		"b": 1.0,
+	}
+	syncTask, err := scene.InvokeNodeComponent(string(Sync), nodeID, compoID, testParams, nil)
+	if err != nil {
+		t.Fatalf("failed to invoke node component: %v\n\n\n", err)
+	}
+	// syncing task
+	result, err := syncTask.(*SyncTask).Syncing()
+	if err != nil {
+		t.Fatalf("error happend when syncing task: %vn\n\n", err)
+	}
+	fmt.Printf("\n\n\nresult invoked from componnet %v of node %v is: %v\n\n\n", compoID, nodeID, result)
+
+	// check if node attribute has been updated
+	node, err := scene.GetNode(nodeID)
+	if err != nil {
+		t.Fatalf("err: %v\n\n\n", err)
+	}
+	nodeResult := node.GetParam("result")
+	if nodeResult != 1.1 {
+		t.Fatalf("node attribute about result is expected to be 1.1, but is %v", nodeResult)
+	}
+	fmt.Printf("updated node result is: %v\n\n\n", node.GetParam("result"))
+
+	// delete node and component
+	if err = scene.DeleteNode(nodeID); err != nil {
+		t.Fatalf("failed to delete node: %v\n\n\n", err)
+	}
+	if err = scene.DeleteComponent(compoID); err != nil {
+		t.Fatalf("failed to delete component: %v\n\n\n", err)
+	}
 }

@@ -1,0 +1,35 @@
+{
+    "name": "Restful API for Adding",
+    "method": "POST",
+    "description": "Add a and b",
+    "api": "http://127.0.0.1:8000/api/v0/add",
+    "reqSchema": "application/json",
+    "reqParams": [
+        {
+            "name": "a",
+            "type": "float64",
+            "required": true,
+            "description": "The addend, must be a number"
+        },
+        {
+            "name": "b",
+            "type": "float64",
+            "required": true,
+            "description": "The summand, must be a number"
+        }
+    ],
+    "resStatuses": [
+        {
+            "code": 200,
+            "schema": "application/json",
+            "description": "Node created successfully",
+            "params": [
+                {
+                    "name": "result",
+                    "type": "float64",
+                    "description": "The result, is a number"
+                }
+            ]
+        }
+    ]
+}
