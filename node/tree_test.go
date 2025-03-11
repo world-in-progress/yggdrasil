@@ -85,10 +85,16 @@ func TestTree(t *testing.T) {
 	}
 
 	// get test node (test node will be auto-activated)
-	if node, err := tree.GetNode(childID); err != nil {
+	node, err := tree.GetNode(childID)
+	if err != nil {
 		t.Fatalf("%v", err)
 	} else {
 		fmt.Printf("node children IDs are %v: ", node.GetChildIDs())
+	}
+
+	// bind a component to test child node
+	if err = tree.BindComponentToNode(node.GetID(), "WOW-THE-FIRST-COMPONENT-ID"); err != nil {
+		t.Fatalf("failed to bind component to node: %v", err)
 	}
 
 	// delete test node (test child node and test child-child node will be recursively deleted)

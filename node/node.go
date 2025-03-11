@@ -21,6 +21,11 @@ func NewNode(attributes map[string]any) *Node {
 		attributes:  attributes,
 		childrenIDs: make([]string, 0),
 	}
+
+	if _, ok := n.attributes["components"]; !ok {
+		n.attributes["components"] = make([]string, 0)
+	}
+
 	return n
 }
 
@@ -93,6 +98,36 @@ func (n *Node) UpdateAttribute(name string, update any) (any, error) {
 	}
 	n.attributes[name] = update
 	return old, nil
+}
+
+func (n *Node) AddComponent(compoID string) bool {
+	// If component exists, then return
+	components, _ := n.attributes["components"].([]string)
+	for _, id := range components {
+		if id == compoID {
+			return false
+		}
+	}
+
+	n.dirty.Store(true)
+	n.callTime = time.Now()
+	n.attributes["components"] = append(n.attributes["components"].([]string), compoID)
+	return true
+}
+
+func (n *Node) DeleteComponent(compoID string) bool {
+	components, _ := n.attributes["components"].([]string)
+	for i, id := range components {
+		if id == compoID {
+			n.dirty.Store(true)
+			n.callTime = time.Now()
+
+			n.attributes["components"] = append(components[:i], components[i+1:]...)
+			return true
+		}
+	}
+
+	return false
 }
 
 func (n *Node) Serialize() map[string]any {

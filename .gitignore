@@ -34,4 +34,5 @@ go.work.sum
 koko
 
 # Python file
+__pycache__
 *.pyc
