@@ -32,3 +32,6 @@ go.work.sum
 
 # KOKO prototype
 koko
+
+# Python file
+*.pyc

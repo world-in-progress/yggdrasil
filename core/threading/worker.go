@@ -6,7 +6,6 @@ import (
 )
 
 type Worker struct {
-	ID         string
 	taskChan   chan ITask
 	lastActive time.Time
 }
