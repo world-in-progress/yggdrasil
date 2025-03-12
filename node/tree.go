@@ -3,24 +3,18 @@ package node
 import (
 	"container/heap"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
-	nodemodel "github.com/world-in-progress/yggdrasil/node/model"
+	nodeinterface "github.com/world-in-progress/yggdrasil/node/interface"
+	"github.com/world-in-progress/yggdrasil/node/nodeschema"
 )
 
 type (
-	IRepository interface {
-		Create(ctx context.Context, table string, record map[string]any) (string, error)
-		ReadOne(ctx context.Context, table string, filter map[string]any) (map[string]any, error)
-		ReadAll(ctx context.Context, table string, filter map[string]any) ([]map[string]any, error)
-		Update(ctx context.Context, table string, filter map[string]any, update map[string]any) error
-		Delete(ctx context.Context, table string, filter map[string]any) error
-		Count(ctx context.Context, table string, filter map[string]any) (int64, error)
-	}
-
 	nodeEntry struct {
 		index int
 		node  *Node
@@ -32,14 +26,14 @@ type (
 		cacheSize int
 		nodeCache sync.Map
 		heap      nodeHeap
-		repo      IRepository
-		modeler   *nodemodel.ModelManager
+		repo      nodeinterface.IRepository
+		schemaMgr *nodeschema.SchemaManager
 
 		mu sync.RWMutex
 	}
 )
 
-func NewTree(name string, repo IRepository, cacheSize uint) (*Tree, error) {
+func NewTree(name string, repo nodeinterface.IRepository, cacheSize uint) (*Tree, error) {
 	t := &Tree{
 		repo:      repo,
 		nodeCache: sync.Map{},
@@ -47,21 +41,59 @@ func NewTree(name string, repo IRepository, cacheSize uint) (*Tree, error) {
 		heap:      make(nodeHeap, 0),
 	}
 
-	// add node model manager
-	modeler, err := nodemodel.NewModelManager()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create model manager for Tree: %v", err)
-	}
-	t.modeler = modeler
+	// add node schema manager
+	schemaMgr := nodeschema.NewSchemaManager(t.repo)
+	t.schemaMgr = schemaMgr
 
 	heap.Init(&t.heap)
 	return t, nil
 }
 
+// RegisterNodeSchema registers a node schema to repository.
+// Any node want to be registered to resource tree must follow a specific and existing schema.
+func (t *Tree) RegisterNodeSchema(schemaInfo map[string]any) error {
+	if err := t.schemaMgr.RegisterSchema(schemaInfo); err != nil {
+		return err
+	}
+	return nil
+}
+
+// RegistserNodeSchemaFromJson registers node schemas to repository by a json file.
+// Schemas in Json file must be organized as an array named "schemas"
+func (t *Tree) RegistserNodeSchemaFromJson(path string) error {
+	// read node schema from json file
+	file, err := os.Open(path)
+	if err != nil {
+		return fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
+
+	var nodeSchemas map[string]any
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&nodeSchemas)
+	if err != nil {
+		return fmt.Errorf("error decoding json: %v", err)
+	}
+
+	// register schemas
+	schemasRaw, ok := nodeSchemas["schemas"]
+	if !ok {
+		return fmt.Errorf("error parse schemas")
+	}
+
+	for _, schema := range schemasRaw.([]any) {
+		if err = t.schemaMgr.RegisterSchema(schema.(map[string]any)); err != nil {
+			return fmt.Errorf("%v", err)
+		}
+	}
+
+	return nil
+}
+
 // RegisterNode records node information to repository and activates the node in the runtime cache.
 func (t *Tree) RegisterNode(modelName string, nodeInfo map[string]any) (string, error) {
 	// check validation
-	if err := t.modeler.Validate(modelName, nodeInfo); err != nil {
+	if err := t.schemaMgr.Validate(modelName, nodeInfo); err != nil {
 		return "", fmt.Errorf("nodeInfo %v provided for node registration is invalid: %v", nodeInfo, err)
 	}
 
@@ -139,13 +171,13 @@ func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
 		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
+		if !t.schemaMgr.HasModel(modelName) {
 			return fmt.Errorf("model name %s is not declared in model manager", modelName)
 		}
 	}
 
 	// check if update data is valid
-	if err := t.modeler.ValidateField(modelName, name, update); err != nil {
+	if err := t.schemaMgr.ValidateField(modelName, name, update); err != nil {
 		return fmt.Errorf("update data is not valid: %v", err)
 	}
 
@@ -176,7 +208,7 @@ func (t *Tree) BindComponentToNode(ID, compoID string) error {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
 		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
+		if !t.schemaMgr.HasModel(modelName) {
 			return fmt.Errorf("model name %s is not declared in model manager", modelName)
 		}
 	}
@@ -206,7 +238,7 @@ func (t *Tree) DeleteComponentFromNode(ID, compoID string) error {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
 		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
+		if !t.schemaMgr.HasModel(modelName) {
 			return fmt.Errorf("model name %s is not declared in model manager", modelName)
 		}
 	}
