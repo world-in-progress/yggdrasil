@@ -59,7 +59,7 @@ func TestNodeSchema(t *testing.T) {
 	fmt.Printf("\n\n\nschemas are: %+v\n\n\n", schemasRaw)
 
 	for _, schema := range schemasRaw.([]any) {
-		if err = schemaMgr.RegisterSchema(schema.(map[string]any)); err != nil {
+		if _, err = schemaMgr.RegisterSchema(schema.(map[string]any)); err != nil {
 			t.Errorf("%v", err)
 		}
 	}

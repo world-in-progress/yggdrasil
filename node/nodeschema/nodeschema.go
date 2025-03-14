@@ -51,18 +51,18 @@ func NewSchemaManager(repo nodeinterface.IRepository) *SchemaManager {
 	}
 }
 
-func (sm *SchemaManager) RegisterSchema(schemaInfo map[string]any) error {
+func (sm *SchemaManager) RegisterSchema(schemaInfo map[string]any) (string, error) {
 	ctx := context.Background()
 
 	// Check if schema info is empty.
 	if len(schemaInfo) == 0 {
-		return fmt.Errorf("schemaInfo cannot be empty")
+		return "", fmt.Errorf("schemaInfo cannot be empty")
 	}
 
 	// Extract and verify schema name.
 	name, ok := schemaInfo["name"].(string)
 	if !ok || name == "" {
-		return fmt.Errorf("schema name must be a non-empry string")
+		return "", fmt.Errorf("schema name must be a non-empry string")
 	}
 
 	// Check if schema already exists.
@@ -70,15 +70,15 @@ func (sm *SchemaManager) RegisterSchema(schemaInfo map[string]any) error {
 	_, existsInCache := sm.cache[name]
 	sm.mu.RUnlock()
 	if existsInCache {
-		return fmt.Errorf("schema name %s already exists", name)
+		return "", fmt.Errorf("schema name %s already exists", name)
 	}
 
 	count, err := sm.repo.Count(ctx, "nodeschema", map[string]any{"name": name})
 	if err != nil {
-		return fmt.Errorf("check for model name duplication failed: %v", err)
+		return "", fmt.Errorf("check for model name duplication failed: %v", err)
 	}
 	if count > 0 {
-		return fmt.Errorf("schema name %s already exists", name)
+		return "", fmt.Errorf("schema name %s already exists", name)
 	}
 
 	// Extract and verify field of extends if existing.
@@ -86,40 +86,40 @@ func (sm *SchemaManager) RegisterSchema(schemaInfo map[string]any) error {
 	if ext, ok := schemaInfo["extends"]; ok {
 		extends, ok = ext.(string)
 		if !ok {
-			return fmt.Errorf("extends of schema info must be a string")
+			return "", fmt.Errorf("extends of schema info must be a string")
 		}
-		if extends != "" && !sm.HasModel(extends) {
-			return fmt.Errorf("base schema %s does not exist", extends)
+		if extends != "" && !sm.HasSchema(extends) {
+			return "", fmt.Errorf("base schema %s does not exist", extends)
 		}
 	}
 
 	// Extract and verify field of fields.
 	fieldsRaw, ok := schemaInfo["fields"].(map[string]any)
 	if !ok {
-		return fmt.Errorf("fields of schema info must be type of map[string]any")
+		return "", fmt.Errorf("fields of schema info must be type of map[string]any")
 	}
 
 	// Try to parse fieldsRaw.
 	fieldsJson, err := json.Marshal(fieldsRaw)
 	if err != nil {
-		return fmt.Errorf("failed to serialize fields of schema %s", name)
+		return "", fmt.Errorf("failed to serialize fields of schema %s", name)
 	}
 	rawFields := make(map[string]json.RawMessage)
 	if err := json.Unmarshal(fieldsJson, &rawFields); err != nil {
-		return fmt.Errorf("failed to deserialize fields of schema %s: %v", name, err)
+		return "", fmt.Errorf("failed to deserialize fields of schema %s: %v", name, err)
 	}
 
 	// First paring: build base model.
 	fields := make(map[string]*FieldDefinition)
 	if err := ParseFields(rawFields, fields, nil); err != nil {
-		return err
+		return "", err
 	}
 
 	// Second parsing: process inheritance and complex types.
 	if extends != "" {
-		baseModel, err := sm.loadSchema(ctx, extends)
+		baseModel, err := sm.LoadSchema(ctx, extends)
 		if err != nil {
-			return fmt.Errorf("failed to load base schema %s: %v", extends, err)
+			return "", fmt.Errorf("failed to load base schema %s: %v", extends, err)
 		}
 		for k, v := range baseModel.Fields {
 			if _, exists := fields[k]; !exists { // do not overwrite existing fields
@@ -137,21 +137,106 @@ func (sm *SchemaManager) RegisterSchema(schemaInfo map[string]any) error {
 	sm.mu.Unlock()
 
 	// Write schema to repository.
+	schemaID := uuid.New().String()
 	record := map[string]any{
-		"_id":     uuid.New().String(),
+		"_id":     schemaID,
 		"name":    name,
 		"extends": extends,
 		"fields":  fieldsRaw,
 	}
 	_, err = sm.repo.Create(ctx, "nodeschema", record)
 	if err != nil {
-		return fmt.Errorf("failed to store node schema to repository: %v", err)
+		return "", fmt.Errorf("failed to store node schema to repository: %v", err)
 	}
 
-	return err
+	return schemaID, nil
 }
 
-func (sm *SchemaManager) loadSchema(ctx context.Context, schemaName string) (*SchemaDefinition, error) {
+// GetSchemaID get the ID of a specific shcema by its name
+func (sm *SchemaManager) GetSchemaID(schemaName string) (string, error) {
+	// Find in cache.
+	sm.mu.RLock()
+	if cached, ok := sm.cache[schemaName]; ok {
+		sm.mu.RUnlock()
+		return cached.ID, nil
+	}
+	sm.mu.RUnlock()
+
+	// Find in repository.
+	ctx := context.Background()
+	record, err := sm.repo.ReadOne(ctx, "nodeschema", map[string]any{"name": schemaName})
+	if err != nil {
+		return "", fmt.Errorf("failed to find schema having name '%s': %v", schemaName, err)
+	}
+
+	return record["_id"].(string), nil
+}
+
+// GetSchema gets a specific schema by its ID.
+func (sm *SchemaManager) GetSchema(schemaID string) (*SchemaDefinition, error) {
+	// Query schema from repository.
+	ctx := context.Background()
+	record, err := sm.repo.ReadOne(ctx, "nodeschema", map[string]any{"_id": schemaID})
+	if err != nil {
+		return nil, fmt.Errorf("cannot find schema by ID %s: %v", schemaID, err)
+	}
+	if len(record) == 0 {
+		return nil, fmt.Errorf("schema having ID %s does not exist", schemaID)
+	}
+
+	name, _ := record["name"].(string)
+	extends, _ := record["extends"].(string)
+	fieldsRaw, _ := record["field"].(map[string]any)
+
+	sm.mu.RLock()
+	if cached, ok := sm.cache[name]; ok {
+		sm.mu.RUnlock()
+		return cached, nil
+	}
+	sm.mu.RUnlock()
+
+	fieldsJson, err := json.Marshal(fieldsRaw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to serialize fields of schema %s", name)
+	}
+	rawFields := make(map[string]json.RawMessage)
+	if err := json.Unmarshal(fieldsJson, &rawFields); err != nil {
+		return nil, fmt.Errorf("failed to deserialize fields of schema %s: %v", name, err)
+	}
+
+	// First paring: build base model.
+	fields := make(map[string]*FieldDefinition)
+	if err := ParseFields(rawFields, fields, nil); err != nil {
+		return nil, err
+	}
+
+	// Second parsing: process inheritance and complex types.
+	if extends != "" {
+		baseModel, err := sm.LoadSchema(ctx, extends)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load base schema %s: %v", extends, err)
+		}
+		for k, v := range baseModel.Fields {
+			if _, exists := fields[k]; !exists { // do not overwrite existing fields
+				fields[k] = v
+			}
+		}
+	}
+
+	// Write schema to cache.
+	schema := &SchemaDefinition{
+		Name:   name,
+		Fields: fields,
+	}
+	sm.mu.Lock()
+	sm.cache[name] = schema
+	sm.mu.Unlock()
+
+	return schema, nil
+}
+
+// LoadSchema loads a specific schema by its name.
+func (sm *SchemaManager) LoadSchema(ctx context.Context, schemaName string) (*SchemaDefinition, error) {
 	sm.mu.RLock()
 	if cached, ok := sm.cache[schemaName]; ok {
 		sm.mu.RUnlock()
@@ -189,7 +274,7 @@ func (sm *SchemaManager) loadSchema(ctx context.Context, schemaName string) (*Sc
 
 	// Second parsing: process inheritance and complex types.
 	if extends != "" {
-		baseModel, err := sm.loadSchema(ctx, extends)
+		baseModel, err := sm.LoadSchema(ctx, extends)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load base schema %s: %v", extends, err)
 		}
@@ -212,80 +297,21 @@ func (sm *SchemaManager) loadSchema(ctx context.Context, schemaName string) (*Sc
 	return schema, nil
 }
 
-// func NewModelManager() (*SchemaManager, error) {
-
-// 	modelConfig := config.LoadModelConfig()
-
-// 	data, err := os.ReadFile(modelConfig.Path)
-// 	if err != nil {
-// 		return nil, fmt.Errorf("failed to read config file: %v", err)
-// 	}
-
-// 	var config struct {
-// 		Models []struct {
-// 			Name    string                     `json:"name"`
-// 			Extends string                     `json:"extends,omitempty"`
-// 			Fields  map[string]json.RawMessage `json:"fields"`
-// 		} `json:"models"`
-// 	}
-// 	if err := json.Unmarshal(data, &config); err != nil {
-// 		return nil, fmt.Errorf("failed to unmarsal JSON: %v", err)
-// 	}
-
-// 	// First parsing: build base model.
-// 	tempModels := make(map[string]*SchemaDefinition)
-// 	for _, m := range config.Models {
-// 		fields := make(map[string]*FieldDefinition)
-// 		if err := ParseFields(m.Fields, fields, nil); err != nil {
-// 			return nil, err
-// 		}
-// 		tempModels[m.Name] = &SchemaDefinition{
-// 			Name:    m.Name,
-// 			Extends: m.Extends,
-// 			Fields:  fields,
-// 		}
-// 	}
-
-// 	// Second parsing: process inheritance and complex types.
-// 	models := make(map[string]*SchemaDefinition)
-// 	for _, m := range config.Models {
-// 		fields := make(map[string]*FieldDefinition)
-// 		if err := ParseFields(m.Fields, fields, tempModels); err != nil {
-// 			return nil, err
-// 		}
-
-// 		// process inheritance
-// 		if m.Extends != "" {
-// 			if base, ok := tempModels[m.Extends]; ok {
-// 				for k, v := range base.Fields {
-// 					if _, exists := fields[k]; !exists { // do not overwrite existed fields
-// 						fields[k] = v
-// 					}
-// 				}
-// 			} else {
-// 				return nil, fmt.Errorf("base model %s not found for %s", m.Extends, m.Name)
-// 			}
-// 		}
-
-// 		models[m.Name] = &SchemaDefinition{
-// 			Name:   m.Name,
-// 			Fields: fields,
-// 		}
-// 	}
-// 	return &SchemaManager{
-// 		cache: models,
-// 	}, nil
-// }
-
-func (sm *SchemaManager) HasModel(schemaName string) bool {
+func (sm *SchemaManager) HasSchema(schemaName string) bool {
 	ctx := context.Background()
-	_, err := sm.loadSchema(ctx, schemaName)
+	_, err := sm.LoadSchema(ctx, schemaName)
+	return err == nil
+}
+
+func (sm *SchemaManager) HasSchemaByID(schemaID string) bool {
+	ctx := context.Background()
+	_, err := sm.repo.ReadOne(ctx, "nodeschema", map[string]any{"_id": schemaID})
 	return err == nil
 }
 
 func (sm *SchemaManager) Validate(schemaName string, data map[string]any) error {
 	ctx := context.Background()
-	schema, err := sm.loadSchema(ctx, schemaName)
+	schema, err := sm.LoadSchema(ctx, schemaName)
 	if err != nil {
 		return err
 	}
@@ -294,7 +320,7 @@ func (sm *SchemaManager) Validate(schemaName string, data map[string]any) error 
 
 func (sm *SchemaManager) ValidateField(schemaName string, fieldName string, data any) error {
 	ctx := context.Background()
-	schema, err := sm.loadSchema(ctx, schemaName)
+	schema, err := sm.LoadSchema(ctx, schemaName)
 	if err != nil {
 		return err
 	}
@@ -463,7 +489,7 @@ func (sm *SchemaManager) validateField(ctx context.Context, name string, value a
 
 	// If type of a field is a referenced schema, make recursively loading and validation.
 	if _, isSchema := sm.cache[def.Type]; isSchema || (!basicTypes[def.Type] && def.Type != "object" && def.Type != "array" && def.Type != "map") {
-		schema, err := sm.loadSchema(ctx, def.Type)
+		schema, err := sm.LoadSchema(ctx, def.Type)
 		if err != nil {
 			return fmt.Errorf("failed to load referenced schema %s: %v", def.Type, err)
 		}

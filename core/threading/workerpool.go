@@ -61,14 +61,14 @@ func (wp *WorkerPool) GetWorkerCount() int {
 }
 
 func (wp *WorkerPool) Submit(task ITask) (TaskCancelFunc, error) {
-	return wp.process(task, nil)
+	return wp.dispatch(task, nil)
 }
 
 func (wp *WorkerPool) SubmitTimeout(timeout time.Duration, task ITask) (TaskCancelFunc, error) {
-	return wp.process(task, time.After(timeout))
+	return wp.dispatch(task, time.After(timeout))
 }
 
-func (wp *WorkerPool) process(task ITask, timeout <-chan time.Time) (TaskCancelFunc, error) {
+func (wp *WorkerPool) dispatch(task ITask, timeout <-chan time.Time) (TaskCancelFunc, error) {
 	if timeout == nil {
 		timeout = make(chan time.Time)
 	}

@@ -84,7 +84,7 @@ func (r *MongoRepository) ReadOne(ctx context.Context, table string, filter map[
 	var result map[string]any
 	err := coll.FindOne(timeoutCtx, bson.M(filter)).Decode(&result)
 	if err == mongo.ErrNoDocuments {
-		return nil, mongo.ErrNoDocuments
+		return map[string]any{}, mongo.ErrNoDocuments
 	}
 	if err != nil {
 		logger.Error("Query failed for collection %s: %v", table, err)

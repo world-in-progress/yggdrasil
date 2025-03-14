@@ -1,5 +1,5 @@
 {
-    "models": [
+    "schemas": [
         {
             "name": "MongoDocument",
             "fields": {
@@ -12,6 +12,7 @@
             "extends": "MongoDocument",
             "fields": {
                 "parent": {"type": "string"},
+                "template": {"type": "string"},
                 "components": { 
                     "type": "array",
                     "item": {"type": "string"}
