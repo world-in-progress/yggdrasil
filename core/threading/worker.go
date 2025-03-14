@@ -56,7 +56,7 @@ func (w *Worker) processTask(task ITask) {
 		fmt.Printf("Task (ID: %s) has been canceled or done\n", task.GetID())
 		return
 	}
-	w.lastActive = time.Now()
 	task.Process()
 	task.Complete()
+	w.lastActive = time.Now()
 }

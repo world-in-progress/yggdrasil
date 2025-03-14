@@ -40,6 +40,11 @@ func TestTree(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// register node schemas
+	if _, err = tree.RegistserNodeSchemaFromJson("node_schema_test.json"); err != nil {
+		t.Fatal(err)
+	}
+
 	// start test
 	var nodeID string
 	var childID string

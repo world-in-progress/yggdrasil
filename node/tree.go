@@ -3,24 +3,18 @@ package node
 import (
 	"container/heap"
 	"context"
+	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
 	"github.com/google/uuid"
-	nodemodel "github.com/world-in-progress/yggdrasil/node/model"
+	nodeinterface "github.com/world-in-progress/yggdrasil/node/interface"
+	"github.com/world-in-progress/yggdrasil/node/nodeschema"
 )
 
 type (
-	IRepository interface {
-		Create(ctx context.Context, table string, record map[string]any) (string, error)
-		ReadOne(ctx context.Context, table string, filter map[string]any) (map[string]any, error)
-		ReadAll(ctx context.Context, table string, filter map[string]any) ([]map[string]any, error)
-		Update(ctx context.Context, table string, filter map[string]any, update map[string]any) error
-		Delete(ctx context.Context, table string, filter map[string]any) error
-		Count(ctx context.Context, table string, filter map[string]any) (int64, error)
-	}
-
 	nodeEntry struct {
 		index int
 		node  *Node
@@ -32,14 +26,14 @@ type (
 		cacheSize int
 		nodeCache sync.Map
 		heap      nodeHeap
-		repo      IRepository
-		modeler   *nodemodel.ModelManager
+		repo      nodeinterface.IRepository
+		SchemaMgr *nodeschema.SchemaManager
 
 		mu sync.RWMutex
 	}
 )
 
-func NewTree(name string, repo IRepository, cacheSize uint) (*Tree, error) {
+func NewTree(name string, repo nodeinterface.IRepository, cacheSize uint) (*Tree, error) {
 	t := &Tree{
 		repo:      repo,
 		nodeCache: sync.Map{},
@@ -47,35 +41,77 @@ func NewTree(name string, repo IRepository, cacheSize uint) (*Tree, error) {
 		heap:      make(nodeHeap, 0),
 	}
 
-	// add node model manager
-	modeler, err := nodemodel.NewModelManager()
-	if err != nil {
-		return nil, fmt.Errorf("failed to create model manager for Tree: %v", err)
-	}
-	t.modeler = modeler
+	// add node schema manager
+	schemaMgr := nodeschema.NewSchemaManager(t.repo)
+	t.SchemaMgr = schemaMgr
 
 	heap.Init(&t.heap)
 	return t, nil
 }
 
+// RegisterNodeSchema registers a node schema to repository.
+// Any node want to be registered to resource tree must follow a specific and existing schema.
+func (t *Tree) RegisterNodeSchema(schemaInfo map[string]any) (string, error) {
+	schemaID, err := t.SchemaMgr.RegisterSchema(schemaInfo)
+	if err != nil {
+		return "", err
+	}
+	return schemaID, nil
+}
+
+// RegistserNodeSchemaFromJson registers node schemas to repository by a json file.
+// Schemas in Json file must be organized as an array named "schemas"
+func (t *Tree) RegistserNodeSchemaFromJson(path string) (map[string]any, error) {
+	// Read node schema from json file.
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("error opening file: %v", err)
+	}
+	defer file.Close()
+
+	var nodeSchemas map[string]any
+	decoder := json.NewDecoder(file)
+	err = decoder.Decode(&nodeSchemas)
+	if err != nil {
+		return nil, fmt.Errorf("error decoding json: %v", err)
+	}
+
+	// Register schemas.
+	schemasRaw, ok := nodeSchemas["schemas"]
+	if !ok {
+		return nil, fmt.Errorf("error parse schemas")
+	}
+
+	schemas := make(map[string]any)
+	for _, schema := range schemasRaw.([]any) {
+		s := schema.(map[string]any)
+		if _, err = t.SchemaMgr.RegisterSchema(s); err != nil {
+			return nil, fmt.Errorf("%v", err)
+		}
+		schemas[s["name"].(string)] = schema
+	}
+
+	return schemas, nil
+}
+
 // RegisterNode records node information to repository and activates the node in the runtime cache.
-func (t *Tree) RegisterNode(modelName string, nodeInfo map[string]any) (string, error) {
-	// check validation
-	if err := t.modeler.Validate(modelName, nodeInfo); err != nil {
+func (t *Tree) RegisterNode(schemaName string, nodeInfo map[string]any) (string, error) {
+	// Check validation
+	if err := t.SchemaMgr.Validate(schemaName, nodeInfo); err != nil {
 		return "", fmt.Errorf("nodeInfo %v provided for node registration is invalid: %v", nodeInfo, err)
 	}
 
-	// create uuid
-	ID := modelName + "-" + uuid.New().String()
+	// Create uuid
+	ID := schemaName + "-" + uuid.New().String()
 	nodeInfo["_id"] = ID
 
-	// create node info to repository
+	// Create node info to repository
 	ctx := context.Background()
 	if _, err := t.repo.Create(ctx, "node", nodeInfo); err != nil {
 		return "", fmt.Errorf("failed to create node %v: %v", nodeInfo, err)
 	}
 
-	// active node
+	// Active node
 	if err := t.activateNode(ID); err != nil {
 		return "", fmt.Errorf("failed to active node: %v", err)
 	}
@@ -84,7 +120,7 @@ func (t *Tree) RegisterNode(modelName string, nodeInfo map[string]any) (string, 
 
 // GetNode gets a node pointer through cache or deserializing from repository record.
 func (t *Tree) GetNode(ID string) (*Node, error) {
-	// get node if it is active
+	// Get node if it is active
 	if val, loaded := t.nodeCache.Load(ID); loaded {
 		node := val.(*Node)
 		t.updateHeap(node)
@@ -100,30 +136,30 @@ func (t *Tree) GetNode(ID string) (*Node, error) {
 
 // DeleteNode recursively deletes cache and repository record from the provided node
 func (t *Tree) DeleteNode(ID string) error {
-	// get node
+	// Get node
 	node, err := t.GetNode(ID)
 	if err != nil {
 		return fmt.Errorf("failed to get node: %v", err)
 	}
 
-	// remove node from parent if parent is active
+	// Remove node from parent if parent is active
 	if val, loaded := t.nodeCache.Load(node.GetParentID()); loaded {
 		val.(*Node).RemoveChild(ID)
 	}
 
-	// recursively remove children
+	// Recursively remove children
 	for _, childID := range node.GetChildIDs() {
 		if err := t.DeleteNode(childID); err != nil {
 			return fmt.Errorf("failed to recursively remove children: %v", err)
 		}
 	}
 
-	// deactivate
+	// Deactivate
 	if err := t.deactivateNode(ID); err != nil {
 		return fmt.Errorf("failed to deactivate node: %v", err)
 	}
 
-	// delete node record in repository
+	// Delete node record in repository
 	ctx := context.Background()
 	if err := t.repo.Delete(ctx, "node", map[string]any{"_id": ID}); err != nil {
 		return fmt.Errorf("failed to delete node record: %v", err)
@@ -133,23 +169,23 @@ func (t *Tree) DeleteNode(ID string) error {
 }
 
 func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
-	// get model name
-	var modelName string
+	// Get schema name
+	var schemaName string
 	if infos := strings.Split(ID, "-"); len(infos) != 6 {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
-		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
-			return fmt.Errorf("model name %s is not declared in model manager", modelName)
+		schemaName = infos[0]
+		if !t.SchemaMgr.HasSchema(schemaName) {
+			return fmt.Errorf("schema name %s is not declared in schema manager", schemaName)
 		}
 	}
 
-	// check if update data is valid
-	if err := t.modeler.ValidateField(modelName, name, update); err != nil {
+	// Check if update data is valid
+	if err := t.SchemaMgr.ValidateField(schemaName, name, update); err != nil {
 		return fmt.Errorf("update data is not valid: %v", err)
 	}
 
-	// update cache if node is active
+	// Update cache if node is active
 	if val, ok := t.nodeCache.Load(ID); ok {
 		node := val.(*Node)
 		if _, err := node.UpdateAttribute(name, update); err != nil {
@@ -159,7 +195,7 @@ func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
 		return nil
 	}
 
-	// update repository record if node is inactive
+	// Update repository record if node is inactive
 	ctx := context.Background()
 	filter := map[string]any{"_id": ID}
 	updateData := map[string]any{"$set": map[string]any{name: update}}
@@ -169,27 +205,18 @@ func (t *Tree) UpdateNodeAttribute(ID string, name string, update any) error {
 	return nil
 }
 
+// Must check if node ID is invalid before calling this function.
 func (t *Tree) BindComponentToNode(ID, compoID string) error {
-	// get model name
-	var modelName string
-	if infos := strings.Split(ID, "-"); len(infos) != 6 {
-		return fmt.Errorf("provided ID %s is not valid", ID)
-	} else {
-		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
-			return fmt.Errorf("model name %s is not declared in model manager", modelName)
-		}
-	}
-
-	// update cache if node is active
+	// Update cache if node is active
 	if val, ok := t.nodeCache.Load(ID); ok {
 		node := val.(*Node)
 		if added := node.AddComponent(compoID); added {
 			t.updateHeap(node)
 		}
+		return nil
 	}
 
-	// update repository record if node is inactive
+	// Update repository record if node is inactive
 	ctx := context.Background()
 	filter := map[string]any{"_id": ID}
 	updateData := map[string]any{"$push": map[string]any{"components": compoID}}
@@ -200,26 +227,27 @@ func (t *Tree) BindComponentToNode(ID, compoID string) error {
 }
 
 func (t *Tree) DeleteComponentFromNode(ID, compoID string) error {
-	// get model name
-	var modelName string
+	// Get schema name
+	var schemaName string
 	if infos := strings.Split(ID, "-"); len(infos) != 6 {
 		return fmt.Errorf("provided ID %s is not valid", ID)
 	} else {
-		modelName = infos[0]
-		if !t.modeler.HasModel(modelName) {
-			return fmt.Errorf("model name %s is not declared in model manager", modelName)
+		schemaName = infos[0]
+		if !t.SchemaMgr.HasSchema(schemaName) {
+			return fmt.Errorf("schema name %s is not declared in schema manager", schemaName)
 		}
 	}
 
-	// delete in cache if node is active
+	// Delete in cache if node is active
 	if val, ok := t.nodeCache.Load(ID); ok {
 		node := val.(*Node)
 		if deleted := node.DeleteComponent(compoID); deleted {
 			t.updateHeap(node)
 		}
+		return nil
 	}
 
-	// delete in repository if node node is inactive
+	// Delete in repository if node node is inactive
 	ctx := context.Background()
 	filter := map[string]any{"_id": ID}
 	updateData := map[string]any{"$pull": map[string]any{"components": compoID}}
@@ -258,12 +286,12 @@ func (t *Tree) GetNodeRecordNum() (int64, error) {
 
 // activateNode activates a node from repository record to the runtime cache.
 func (t *Tree) activateNode(ID string) error {
-	// check if is active
+	// Check if is active
 	if _, loaded := t.nodeCache.LoadOrStore(ID, nil); loaded {
 		return nil
 	}
 
-	// find if is in repository
+	// Find if is in repository
 	ctx := context.Background()
 	nodeInfo, err := t.repo.ReadOne(ctx, "node", map[string]any{"_id": ID})
 	if err != nil {
@@ -271,11 +299,11 @@ func (t *Tree) activateNode(ID string) error {
 		return fmt.Errorf("cannot activate node not existing: %v", err)
 	}
 
-	// activate node
+	// Activate node
 	node := NewNode(nodeInfo)
 	t.nodeCache.Store(ID, node)
 
-	// record children ID through repository
+	// Record children ID through repository
 	if childInfos, err := t.repo.ReadAll(ctx, "node", map[string]any{"parent": ID}); err != nil {
 		t.nodeCache.Delete(ID)
 		return fmt.Errorf("failed to find children of node: %v", err)
@@ -285,7 +313,7 @@ func (t *Tree) activateNode(ID string) error {
 		}
 	}
 
-	// update ChildIDs of parent node
+	// Update ChildIDs of parent node
 	if parentID := node.GetParentID(); parentID != "" {
 		if val, loaded := t.nodeCache.Load(parentID); loaded {
 			val.(*Node).AddChild(ID)
@@ -297,14 +325,14 @@ func (t *Tree) activateNode(ID string) error {
 
 // deactivateNode deactivates a node from the runtime cache and updates its repository record.
 func (t *Tree) deactivateNode(ID string) error {
-	// check if is inactive
+	// Check if is inactive
 	val, loaded := t.nodeCache.LoadAndDelete(ID)
 	if !loaded || val == nil {
 		return nil
 	}
 	node := val.(*Node)
 
-	// update node record in repository if is dirty
+	// Update node record in repository if is dirty
 	if node.IsDirty() {
 		ctx := context.Background()
 		if err := t.repo.Update(ctx, "node", map[string]any{"_id": ID}, map[string]any{"$set": node.Serialize()}); err != nil {
@@ -313,7 +341,7 @@ func (t *Tree) deactivateNode(ID string) error {
 		}
 	}
 
-	// remove from heap
+	// Remove from heap
 	t.removeFromHeap(node)
 	return nil
 }
@@ -326,15 +354,15 @@ func (t *Tree) shrinkLocked() error {
 
 	for t.heap.Len() > toSize {
 
-		// remove from heap
+		// Remove from heap
 		entry := heap.Pop(&t.heap).(*nodeEntry)
 
-		// deactivate node
+		// Deactivate node
 		node := entry.node
 		ID := node.GetID()
 		t.nodeCache.Delete(ID)
 
-		// update node record in repository if is dirty
+		// Update node record in repository if is dirty
 		if node.IsDirty() {
 			ctx := context.Background()
 			if err := t.repo.Update(ctx, "node", map[string]any{"_id": ID}, map[string]any{"$set": node.Serialize()}); err != nil {

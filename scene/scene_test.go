@@ -47,6 +47,11 @@ func TestScene(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// register node schemas
+	if _, err = scene.Tree.RegistserNodeSchemaFromJson("node_schema_test.json"); err != nil {
+		t.Fatal(err)
+	}
+
 	// register component
 	compoID, err := scene.RegisterComponent(component.Restful, compoSchema)
 	if err != nil {
